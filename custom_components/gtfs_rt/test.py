@@ -33,7 +33,7 @@ _LOGGER = logging.getLogger(__name__)
 CONF_NAME = "name"
 
 
-def add_devices():
+def add_devices(sensors: list):
     """Placeholder function to mock up Homeassistant function"""
     return
 
