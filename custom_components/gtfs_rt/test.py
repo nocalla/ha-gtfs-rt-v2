@@ -16,10 +16,13 @@ from sensor import (
     CONF_API_KEY,
     CONF_DEPARTURES,
     CONF_DIRECTION_ID,
+    CONF_GTFS_URL,
     CONF_ICON,
     CONF_ROUTE,
     CONF_ROUTE_DELIMITER,
+    CONF_ROUTE_NAME,
     CONF_SERVICE_TYPE,
+    CONF_STOP_CODE,
     CONF_STOP_ID,
     CONF_TRIP_UPDATE_URL,
     CONF_VEHICLE_POSITION_URL,
@@ -45,6 +48,7 @@ PLATFORM_SCHEMA = Schema(
         Optional(CONF_X_API_KEY): str,
         Optional(CONF_VEHICLE_POSITION_URL): str,
         Optional(CONF_ROUTE_DELIMITER): str,
+        CONF_GTFS_URL: str,
         CONF_DEPARTURES: [
             {
                 CONF_NAME: str,
@@ -53,6 +57,8 @@ PLATFORM_SCHEMA = Schema(
                 Optional(CONF_DIRECTION_ID): str,
                 Optional(CONF_SERVICE_TYPE): str,
                 Optional(CONF_ICON): str,
+                CONF_ROUTE_NAME: str,
+                CONF_STOP_CODE: str,
             }
         ],
     }

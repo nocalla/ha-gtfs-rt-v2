@@ -10,6 +10,7 @@ from homeassistant.components.sensor import PLATFORM_SCHEMA
 from homeassistant.const import ATTR_LATITUDE, ATTR_LONGITUDE, CONF_NAME
 from homeassistant.helpers.entity import Entity
 from homeassistant.util import Throttle
+from StaticTimetable import StaticMasterGTFSInfo, get_stop_departures
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,6 +34,12 @@ CONF_ROUTE_DELIMITER = "route_delimiter"
 CONF_ICON = "icon"
 CONF_SERVICE_TYPE = "service_type"
 
+# these parameters are new for static GTFS integration
+CONF_GTFS_URL = "gtfs_url"
+CONF_ROUTE_NAME = "route_name"
+CONF_STOP_CODE = "stop_code"
+# end of new parameters
+
 DEFAULT_SERVICE = "Service"
 DEFAULT_ICON = "mdi:bus"
 DEFAULT_DIRECTION = "0"
@@ -47,6 +54,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_X_API_KEY): cv.string,
         vol.Optional(CONF_VEHICLE_POSITION_URL): cv.string,
         vol.Optional(CONF_ROUTE_DELIMITER): cv.string,
+        vol.Required(CONF_GTFS_URL): cv.string,
         vol.Optional(CONF_DEPARTURES): [
             {
                 vol.Required(CONF_NAME): cv.string,
@@ -62,6 +70,8 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
                 vol.Optional(
                     CONF_SERVICE_TYPE, default=DEFAULT_SERVICE  # type: ignore
                 ): cv.string,
+                vol.Required(CONF_ROUTE_NAME): cv.string,
+                vol.Required(CONF_STOP_CODE): cv.string,
             }
         ],
     }
@@ -94,6 +104,16 @@ def log_debug(data: list, indent_level: int) -> None:
 
 def setup_platform(hass, config, add_devices, discovery_info=None):
     """Get the public transport sensor."""
+    MasterGTFSInfo = StaticMasterGTFSInfo(url=config.get(CONF_GTFS_URL))
+    static_stop_departures = dict()
+    for departure in config.get(CONF_DEPARTURES):
+        static_stop_departures.update(
+            get_stop_departures(
+                MasterGTFSInfo,
+                departure.get(CONF_ROUTE_NAME),
+                departure.get(CONF_STOP_CODE),
+            )
+        )
 
     data = PublicTransportData(
         config.get(CONF_TRIP_UPDATE_URL),
@@ -101,7 +121,9 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
         config.get(CONF_ROUTE_DELIMITER),
         config.get(CONF_API_KEY),
         config.get(CONF_X_API_KEY),
+        static_stop_departures,
     )
+
     sensors = []
     for departure in config.get(CONF_DEPARTURES):
         sensors.append(
@@ -121,8 +143,6 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
 
 def get_gtfs_feed_entities(url: str, headers, label: str):
     feed = gtfs_realtime_pb2.FeedMessage()  # type: ignore
-
-    # TODO add timeout to requests call
     response = requests.get(url, headers=headers, timeout=20)
     if response.status_code == 200:
         log_info([f"Successfully updated {label}", response.status_code], 0)
@@ -143,7 +163,16 @@ def get_gtfs_feed_entities(url: str, headers, label: str):
 class PublicTransportSensor(Entity):
     """Implementation of a public transport sensor."""
 
-    def __init__(self, data, stop, route, direction, icon, service_type, name):
+    def __init__(
+        self,
+        data,
+        stop,
+        route,
+        direction,
+        icon,
+        service_type,
+        name,
+    ):
         """Initialize the sensor."""
         self.data = data
         self._name = name
@@ -263,7 +292,7 @@ class PublicTransportSensor(Entity):
             log_info(["Next " + self._service_type, "not defined"], 1)
 
 
-class PublicTransportData(object):
+class PublicTransportData:
     """The Class for handling the data retrieval."""
 
     def __init__(
@@ -273,6 +302,7 @@ class PublicTransportData(object):
         route_delimiter=None,
         api_key=None,
         x_api_key=None,
+        static_stop_departures={},
     ):
         """Initialize the info object."""
         self._trip_update_url = trip_update_url
@@ -285,6 +315,7 @@ class PublicTransportData(object):
         else:
             self._headers = None
         self.info = {}
+        self.scheduled_departures = static_stop_departures
 
     @Throttle(MIN_TIME_BETWEEN_UPDATES)
     def update(self):
@@ -332,6 +363,20 @@ class PublicTransportData(object):
                     ],
                     1,
                 )
+                try:
+                    ScheduledDepartureData = self.scheduled_departures[
+                        entity.trip_update.trip.trip_id
+                    ]
+                    log_debug(
+                        [
+                            "Relevant Trip ID found",
+                            ScheduledDepartureData.string_departure_summary(),
+                        ],
+                        1,
+                    )
+                except KeyError:
+                    ScheduledDepartureData = None
+
                 if self._route_delimiter is not None:
                     route_id_split = entity.trip_update.trip.route_id.split(
                         self._route_delimiter
@@ -375,6 +420,23 @@ class PublicTransportData(object):
                         stop_time = stop.departure.time
                     else:
                         stop_time = stop.arrival.time
+                    if ScheduledDepartureData:
+                        stop_time = (
+                            stop.arrival.time
+                            + ScheduledDepartureData.arrival_time
+                        )
+                        log_info(
+                            [
+                                "RELEVANT STOP!",
+                                "Stop:",
+                                stop_id,
+                                "Stop Sequence:",
+                                stop.stop_sequence,
+                                "Stop Time:",
+                                stop_time,
+                            ],
+                            2,
+                        )
                     log_debug(
                         [
                             "Stop:",
