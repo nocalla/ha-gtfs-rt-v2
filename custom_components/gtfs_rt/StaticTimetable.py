@@ -18,7 +18,6 @@ class StaticMasterInfo:
 
         self.routes = dataframes["routes"]
         self.trips = dataframes["trips"]
-        self.stops = dataframes["stops"]
         self.stop_times = dataframes["stop_times"]
         self.calendar = dataframes["calendar"]
         self.calendar_dates = dataframes["calendar_dates"]
@@ -26,6 +25,8 @@ class StaticMasterInfo:
 
         # add agency data columns to routes data
         self.routes = pd.merge(self.routes, dataframes["agency"])
+        # merge stop details and stop schedule
+        self.stops = pd.merge(self.stop_times, dataframes["stops"])
 
 
 class RouteDetails:
@@ -44,7 +45,7 @@ class RouteDetails:
     - Currently no data in these fields: route_url route_color route_text_color
     """
 
-    def __init__(self, route_short_name: str, routes_df: pd.DataFrame) -> None:
+    def __init__(self, identifier: str, df: pd.DataFrame) -> None:
         """
         Generate Route parameters from provided dataframe using the provided
         route_short_name as a search key.
@@ -57,36 +58,25 @@ class RouteDetails:
         :type routes_df: pd.DataFrame
         """
         self.trips = dict()
-        self.route_short_name = route_short_name
-        self.route_details = get_details_by_id(
-            identifier=self.route_short_name,
+        self.short_name = identifier
+        self.details = get_details_by_id(
+            identifier=self.short_name,
             identifier_col="route_short_name",
-            df=routes_df,
+            df=df,
         ).to_dict(orient="list")
 
         # this part feels clunky, but I'm staying explicit for now
-        self.route_id = self.route_details["route_id"][0]
-        self.agency_id = self.route_details["agency_id"][0]
-        self.route_long_name = self.route_details["route_long_name"][0]
-        self.route_desc = self.route_details["route_desc"][0]
-        self.route_type = self.route_details["route_type"][0]
-        self.route_url = self.route_details["route_url"][0]
-        self.route_color = self.route_details["route_color"][0]
-        self.route_text_color = self.route_details["route_text_color"][0]
-        self.agency_name = self.route_details["agency_name"][0]
-        self.agency_url = self.route_details["agency_url"][0]
-        self.agency_timezone = self.route_details["agency_timezone"][0]
-
-    def get_trip_dict(self, trips_df: pd.DataFrame) -> dict:
-        return (
-            get_details_by_id(
-                identifier=self.route_id,
-                identifier_col="route_id",
-                df=trips_df,
-            )
-            .set_index("trip_id")
-            .to_dict(orient="index")
-        )
+        self.id = self.details["route_id"][0]
+        self.agency_id = self.details["agency_id"][0]
+        self.long_name = self.details["route_long_name"][0]
+        self.desc = self.details["route_desc"][0]
+        self.type = self.details["route_type"][0]
+        self.url = self.details["route_url"][0]
+        self.color = self.details["route_color"][0]
+        self.text_color = self.details["route_text_color"][0]
+        self.agency_name = self.details["agency_name"][0]
+        self.agency_url = self.details["agency_url"][0]
+        self.agency_timezone = self.details["agency_timezone"][0]
 
 
 class TripInfo:
@@ -100,77 +90,51 @@ class TripInfo:
     - shape_id is lookup for shapes.txt
     """
 
-    def __init__(self, trip_id: str, trip_details: dict) -> None:
-        # trip_details = get_details_by_id(
-        #     identifier=trip_id,
-        #     identifier_col="trip_id",
-        #     df=trips_df,
-        # ).to_dict(orient="list")
-
-        self.trip_id = trip_id
-        self.route_id = trip_details["route_id"]
-        self.service_id = trip_details["service_id"]
-        self.trip_headsign = trip_details["trip_headsign"]
-        self.trip_short_name = trip_details["trip_short_name"]
-        self.direction_id = trip_details["direction_id"]
-        self.block_id = trip_details["block_id"]
-        self.shape_id = trip_details["shape_id"]
+    def __init__(self, identifier: str, df: pd.DataFrame) -> None:
+        self.details = df
+        self.id = identifier
+        self.route_id = df["route_id"]
+        self.service_id = df["service_id"]
+        self.headsign = df["trip_headsign"]
+        self.short_name = df["trip_short_name"]
+        self.direction_id = df["direction_id"]
+        self.block_id = df["block_id"]
+        self.shape_id = df["shape_id"]
 
 
-class StopDetails:
+class StopSchedule:
     """
-    Class for handling information in stops.txt,
-    which provides the detail for all the stops referenced.
-    Columns: stop_id, stop_code, stop_name, stop_desc, stop_lat, stop_lon,
-    zone_id, stop_url, location_type, parent_station
-
-    - Look up relevant information using stop_code, which corresponds to the
-    stop's plate code
-    """
-
-    def __init__(self, stop_code: str, stop_df: pd.DataFrame) -> None:
-        stop_details = get_details_by_id(
-            identifier=stop_code,
-            identifier_col="stop_code",
-            df=stop_df,
-        ).to_dict(orient="list")
-
-        self.stop_code = stop_code
-        self.stop_id = stop_details["stop_id"]
-        self.stop_name = stop_details["stop_name"]
-        self.stop_desc = stop_details["stop_desc"]
-        self.stop_lat = stop_details["stop_lat"]
-        self.stop_lon = stop_details["stop_lon"]
-        self.zone_id = stop_details["zone_id"]
-        self.stop_url = stop_details["stop_url"]
-        self.location_type = stop_details["location_type"]
-        self.parent_station = stop_details["parent_station"]
-
-
-class StopTimes:
-    """
-    Class for handling information from stop_times.txt,
+    Class for handling information from stops.txt,
+    which provides the detail for all the stops referenced,
+    and stop_times.txt,
     which provides details of all the stops on a particular trip
     and the expected arrival/departure times at each stop
     Columns: trip_id, arrival_time, departure_time, stop_id, stop_sequence,
-    stop_headsign, pickup_type, drop_off_type, timepoint
+    stop_headsign, pickup_type, drop_off_type, timepoint,
+    stop_code, stop_name, stop_desc, stop_lat, stop_lon,
+    zone_id, stop_url, location_type, parent_station
 
-    - Look up relevant information using trip_id & stop_id to link between the
-    TripInfo object and StopDetails object
+    - Look up the stop_id using stop_code, which corresponds to the
+    stop's plate code
+    - Look up using trip_id & stop_id to link between the
+    TripInfo object and StopSchedule object
     - The stop_id field is a lookup reference to stops.txt
     - The field stop_headsign is populated with the first stop on the trip
     """
 
-    def __init__(self, stop_id: str, stoptimes_df: pd.DataFrame) -> None:
-        stoptimes_details = get_details_by_id(
-            identifier=stop_id,
-            identifier_col="stop_id",
-            df=stoptimes_df,
-        ).to_dict(orient="list")
+    def __init__(self, identifier: str, df: pd.DataFrame) -> None:
+        self.details = (
+            get_details_by_id(
+                identifier=identifier,
+                identifier_col="stop_code",
+                df=df,
+            )
+            .set_index("trip_id")
+            .to_dict(orient="index")
+        )
 
-        print(stoptimes_details)
+        self.trip_ids = [str(k) for k in self.details.keys()]
 
-        # self.trip_id = stoptimes_details["trip_id"][0]
         # self.arrival_time = stoptimes_details["arrival_time"][0]
         # self.departure_time = stoptimes_details["departure_time"][0]
         # self.stop_id = stoptimes_details["stop_id"][0]
@@ -181,7 +145,9 @@ class StopTimes:
         # self.timepoint = stoptimes_details["timepoint"][0]
 
     def get_trip_entry(self, trip_id: str):
-        pass
+        trip_entry = self.details[trip_id]
+        trip_entry.update({"trip_id": trip_id})
+        return trip_entry
 
 
 class Calendar:  # TODO merge this into trip info
@@ -235,20 +201,38 @@ class Shapes:  # TODO - decide what to do with these data
 class Departure:
     def __init__(
         self,
-        ThisTrip: TripInfo,
-        ThisStop: StopDetails,
-        ThisRoute: RouteDetails,
-        ThisSchedule: StopTimes,
+        Trip: TripInfo,
+        Route: RouteDetails,
+        Schedule: StopSchedule,
     ) -> None:
-        # merge the info from the two classes to generate a Departure class
-        print(
-            f"{ThisTrip.trip_id} {ThisRoute.route_long_name}"
-            f"{ThisStop.stop_name}"
-        )
+        # merge the info from the classes to generate a Departure class
 
-    def display_departure_info(self) -> str:
-        dep_info = str()
-        return dep_info
+        self.Trip = Trip
+        self.Route = Route
+        self.Schedule = Schedule
+
+        self.trip_id = Trip.id
+        self.route_long_name = Route.long_name
+        self.schedule_details = Schedule.get_trip_entry(Trip.id)
+
+        self.arrival_time = self.schedule_details["arrival_time"]
+        self.departure_time = self.schedule_details["departure_time"]
+        self.stop_id = self.schedule_details["stop_id"]
+        self.stop_sequence = self.schedule_details["stop_sequence"]
+        self.stop_headsign = self.schedule_details["stop_headsign"]
+        self.pickup_type = self.schedule_details["pickup_type"]
+        self.drop_off_type = self.schedule_details["drop_off_type"]
+        self.timepoint = self.schedule_details["timepoint"]
+        self.stop_code = self.schedule_details["stop_code"]
+        self.stop_name = self.schedule_details["stop_name"]
+        self.stop_desc = self.schedule_details["stop_desc"]
+        self.stop_lat = self.schedule_details["stop_lat"]
+        self.stop_lon = self.schedule_details["stop_lon"]
+        self.zone_id = self.schedule_details["zone_id"]
+        self.stop_url = self.schedule_details["stop_url"]
+        self.location_type = self.schedule_details["location_type"]
+        self.parent_station = self.schedule_details["parent_station"]
+        self.trip_id = self.schedule_details["trip_id"]
 
 
 def get_dataframes(url: str) -> dict[str, pd.DataFrame]:
@@ -267,7 +251,7 @@ def get_dataframes(url: str) -> dict[str, pd.DataFrame]:
         # Extract the file from the zip file
         with zip_file.open(filename, "r") as file:
             # Create a Pandas DataFrame from the file
-            dataframe = pd.read_csv(file)
+            dataframe = pd.read_csv(file, dtype={"stop_code": str})
 
             # Add the DataFrame to the dictionary using filename as key
             dataframes[filename[:-4]] = dataframe
@@ -277,6 +261,8 @@ def get_dataframes(url: str) -> dict[str, pd.DataFrame]:
 def get_details_by_id(
     identifier: str, identifier_col: str, df: pd.DataFrame
 ) -> pd.DataFrame:
+    # print(f"Searching for {identifier_col}: {identifier}"f
+    # "\n{df.head()}\n") # DEBUG
     return df.loc[df[identifier_col] == identifier]
 
 
@@ -284,29 +270,24 @@ def get_stop_departures(
     url: str, route: str, stop_code: str
 ) -> dict[str, Departure]:
     MasterInfo = StaticMasterInfo(url=url)
-    ThisRoute = RouteDetails(
-        route_short_name=route, routes_df=MasterInfo.routes
-    )
-    ThisStop = StopDetails(stop_code=stop_code, stop_df=MasterInfo.stops)
-    this_route_trips = ThisRoute.get_trip_dict(MasterInfo.trips)
-    ThisStopSchedule = StopTimes(
-        stop_id=ThisStop.stop_id, stoptimes_df=MasterInfo.stop_times
-    )
 
-    departure_dict = dict()
-    for trip_id in this_route_trips:
-        ThisTrip = TripInfo(
-            trip_id=trip_id, trip_details=this_route_trips[trip_id]
-        )
-        ThisSchedule = ThisStopSchedule.get_trip_entry(trip_id)
-        departure_dict.update(
+    ThisStopSchedule = StopSchedule(identifier=stop_code, df=MasterInfo.stops)
+    ThisRoute = RouteDetails(identifier=route, df=MasterInfo.routes)
+    scheduled_trip_ids = ThisStopSchedule.trip_ids
+
+    stop_departures = dict()
+    for trip_id in scheduled_trip_ids:
+        ThisTrip = TripInfo(identifier=trip_id, df=MasterInfo.trips)
+        stop_departures.update(
             {
                 trip_id: Departure(
-                    ThisTrip, ThisStop, ThisRoute, ThisSchedule=ThisSchedule
+                    Trip=ThisTrip,
+                    Route=ThisRoute,
+                    Schedule=ThisStopSchedule,
                 )
             }
         )
-    return departure_dict
+    return stop_departures
 
 
 # purely for testing
@@ -317,5 +298,17 @@ if __name__ == "__main__":
     test_stop_departures = get_stop_departures(
         url=GTFS_URL, route=TEST_ROUTE_NAME, stop_code=TEST_STOP_CODE
     )
-    for trip in test_stop_departures.keys():
-        test_stop_departures[trip].display_departure_info()
+
+    for i, trip in enumerate(test_stop_departures.keys()):
+        TestDeparture = test_stop_departures[trip]
+        if i == 0:
+            print(
+                f"Stop: {TestDeparture.stop_name}"
+                f" ({TestDeparture.stop_code}); "
+                f"Route: {TestDeparture.Route.short_name} "
+                f"({TestDeparture.Route.long_name})"
+            )
+        print(
+            f"\t\t{TestDeparture.Trip.id} - Scheduled arrival"
+            f" {TestDeparture.arrival_time}"
+        )
