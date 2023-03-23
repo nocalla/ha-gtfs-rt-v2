@@ -24,17 +24,19 @@ from sensor import (
     CONF_TRIP_UPDATE_URL,
     CONF_VEHICLE_POSITION_URL,
     CONF_X_API_KEY,
-    DEFAULT_DIRECTION,
-    DEFAULT_ICON,
-    DEFAULT_SERVICE,
-    PublicTransportData,
-    PublicTransportSensor,
+    setup_platform,
 )
 
 sys.path.append("lib")
 _LOGGER = logging.getLogger(__name__)
 
 CONF_NAME = "name"
+
+
+def add_devices():
+    """Placeholder function to mock up Homeassistant function"""
+    return
+
 
 PLATFORM_SCHEMA = Schema(
     {
@@ -95,36 +97,7 @@ if __name__ == "__main__":
     try:
         PLATFORM_SCHEMA.validate(configuration)
         logging.info("Input file configuration is valid.")
-
-        data = PublicTransportData(
-            configuration.get(CONF_TRIP_UPDATE_URL),
-            configuration.get(CONF_VEHICLE_POSITION_URL),
-            configuration.get(CONF_ROUTE_DELIMITER),
-            configuration.get(CONF_API_KEY, None),
-            configuration.get(CONF_X_API_KEY, None),
-        )
-
-        sensors = []
-        for departure in configuration[CONF_DEPARTURES]:
-            _LOGGER.info(
-                "Adding Sensor: Name: {}, route id: {}, direction id: {}"
-                .format(
-                    departure[CONF_NAME],
-                    departure[CONF_ROUTE],
-                    departure[CONF_STOP_ID],
-                )
-            )
-            sensors.append(
-                PublicTransportSensor(
-                    data,
-                    departure.get(CONF_STOP_ID),
-                    departure.get(CONF_ROUTE),
-                    departure.get(CONF_DIRECTION_ID, DEFAULT_DIRECTION),
-                    departure.get(CONF_ICON, DEFAULT_ICON),
-                    departure.get(CONF_SERVICE_TYPE, DEFAULT_SERVICE),
-                    departure.get(CONF_NAME),
-                )
-            )
+        setup_platform("", configuration, add_devices, None)
 
     except SchemaError as se:
         logging.info("Input file configuration invalid: {}".format(se))
