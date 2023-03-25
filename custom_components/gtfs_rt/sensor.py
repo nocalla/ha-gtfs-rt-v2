@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 from datetime import datetime, timedelta
 
 import homeassistant.helpers.config_validation as cv
@@ -10,7 +11,7 @@ from homeassistant.components.sensor import PLATFORM_SCHEMA
 from homeassistant.const import ATTR_LATITUDE, ATTR_LONGITUDE, CONF_NAME
 from homeassistant.helpers.entity import Entity
 from homeassistant.util import Throttle
-from StaticTimetable import StaticMasterGTFSInfo, get_stop_departures
+from StaticTimetable import StaticMasterGTFSInfo
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ CONF_STOP_CODE = "stop_code"
 
 DEFAULT_SERVICE = "Service"
 DEFAULT_ICON = "mdi:bus"
-DEFAULT_DIRECTION = "0"
+DEFAULT_DIRECTION = 0
 
 MIN_TIME_BETWEEN_UPDATES = timedelta(seconds=60)
 TIME_STR_FORMAT = "%H:%M"
@@ -63,7 +64,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
                 vol.Optional(
                     CONF_DIRECTION_ID,
                     default=DEFAULT_DIRECTION,  # type: ignore
-                ): str,
+                ): int,
                 vol.Optional(
                     CONF_ICON, default=DEFAULT_ICON  # type: ignore
                 ): cv.string,
@@ -78,9 +79,9 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
 )
 
 
-def due_in_minutes(timestamp):
+def due_in_mins(time: datetime):
     """Get the remaining minutes from now until a given datetime object."""
-    diff = timestamp - dt_util.now().replace(tzinfo=None)
+    diff = time - dt_util.now().replace(tzinfo=None)
     return int(diff.total_seconds() / 60)
 
 
@@ -105,23 +106,23 @@ def log_debug(data: list, indent_level: int) -> None:
 def setup_platform(hass, config, add_devices, discovery_info=None):
     """Get the public transport sensor."""
     MasterGTFSInfo = StaticMasterGTFSInfo(url=config.get(CONF_GTFS_URL))
-    static_stop_departures = dict()
-    for departure in config.get(CONF_DEPARTURES):
-        static_stop_departures.update(
-            get_stop_departures(
-                MasterGTFSInfo,
-                departure.get(CONF_ROUTE_NAME),
-                departure.get(CONF_STOP_CODE),
-            )
-        )
+    # static_stop_departures = dict()
+    # for departure in config.get(CONF_DEPARTURES):
+    #     static_stop_departures.update(
+    #         get_stop_departures(
+    #             MasterGTFSInfo,
+    #             departure.get(CONF_ROUTE_NAME),
+    #             departure.get(CONF_STOP_CODE),
+    #         )
+    #     )
 
     data = PublicTransportData(
-        config.get(CONF_TRIP_UPDATE_URL),
-        config.get(CONF_VEHICLE_POSITION_URL),
-        config.get(CONF_ROUTE_DELIMITER),
-        config.get(CONF_API_KEY),
-        config.get(CONF_X_API_KEY),
-        static_stop_departures,
+        trip_update_url=config.get(CONF_TRIP_UPDATE_URL),
+        vehicle_position_url=config.get(CONF_VEHICLE_POSITION_URL),
+        route_delimiter=config.get(CONF_ROUTE_DELIMITER),
+        api_key=config.get(CONF_API_KEY),
+        x_api_key=config.get(CONF_X_API_KEY),
+        MasterGTFSInfo=MasterGTFSInfo,
     )
 
     sensors = []
@@ -199,7 +200,7 @@ class PublicTransportSensor(Entity):
         """Return the state of the sensor."""
         next_services = self._get_next_services()
         return (
-            due_in_minutes(next_services[0].arrival_time)
+            due_in_mins(next_services[0].arrival_time)
             if len(next_services) > 0
             else "-"
         )
@@ -298,11 +299,11 @@ class PublicTransportData:
     def __init__(
         self,
         trip_update_url,
+        MasterGTFSInfo,
         vehicle_position_url="",
         route_delimiter=None,
         api_key=None,
         x_api_key=None,
-        static_stop_departures={},
     ):
         """Initialize the info object."""
         self._trip_update_url = trip_update_url
@@ -315,7 +316,9 @@ class PublicTransportData:
         else:
             self._headers = None
         self.info = {}
-        self.scheduled_departures = static_stop_departures
+        self.static_departure_info = MasterGTFSInfo.departure_info
+
+        self.stops_dict = {}
 
     @Throttle(MIN_TIME_BETWEEN_UPDATES)
     def update(self):
@@ -341,140 +344,170 @@ class PublicTransportData:
 
         departure_times = {}
 
-        feed_entities = get_gtfs_feed_entities(
-            url=self._trip_update_url, headers=self._headers, label="trip data"
+        # Use list comprehension to filter entities with trip_update field
+        feed_entities = [
+            entity
+            for entity in get_gtfs_feed_entities(
+                url=self._trip_update_url,
+                headers=self._headers,
+                label="trip data",
+            )
+            if entity.HasField("trip_update")
+        ]
+
+        # Initialize departure_times dict using defaultdict to simplify code
+        # departure_times[route_id][direction_id][stop_id]
+        departure_times = defaultdict(
+            lambda: defaultdict(lambda: defaultdict(list))
         )
 
         for entity in feed_entities:
-            if entity.HasField("trip_update"):
-                # If delimiter specified split the route ID in the gtfs rt feed
+            ThisTripData = entity.trip_update
+            ThisTrip = ThisTripData.trip
+            this_trip_id = ThisTrip.trip_id
+            this_route_id = ThisTrip.route_id
+
+            log_debug(
+                [
+                    "Received Trip ID",
+                    this_trip_id,
+                    "Route ID:",
+                    this_route_id,
+                    "direction ID",
+                    ThisTrip.direction_id,
+                    "Start Time:",
+                    ThisTrip.start_time,
+                    "Start Date:",
+                    ThisTrip.start_date,
+                ],
+                1,
+            )
+
+            if self._route_delimiter is not None:
+                route_id_split = this_route_id.split(self._route_delimiter)
+                route_id = (
+                    this_route_id
+                    if route_id_split[0] == self._route_delimiter
+                    else route_id_split[0]
+                )
                 log_debug(
                     [
-                        "Received Trip ID",
-                        entity.trip_update.trip.trip_id,
-                        "Route ID:",
-                        entity.trip_update.trip.route_id,
-                        "direction ID",
-                        entity.trip_update.trip.direction_id,
-                        "Start Time:",
-                        entity.trip_update.trip.start_time,
-                        "Start Date:",
-                        entity.trip_update.trip.start_date,
+                        "Feed Route ID",
+                        ThisTrip.trip.route_id,
+                        "changed to",
+                        route_id,
                     ],
                     1,
                 )
+            else:
+                route_id = this_route_id
+
+            # Simplify direction_id assignment using conditional expression
+            direction_id = (
+                ThisTrip.direction_id
+                if ThisTrip.direction_id is not None
+                else DEFAULT_DIRECTION
+            )
+
+            for stop in ThisTripData.stop_time_update:
+                stop_id = stop.stop_id
+                log_debug([f"Processing stop_id: {stop_id}"], 2)
+
+                if not departure_times[route_id][direction_id][stop_id]:
+                    # Use list() constructor instead of [] to create empty
+                    # list to avoid creating a new list object every time
+                    departure_times[route_id][direction_id][stop_id] = list()
+
+                """ if stop_id not in self.stops_dict:
+                    self.stops_dict[stop_id] = StopSchedule(
+                        identifier=stop_id,
+                        id_col="stop_id",
+                        df=self.MasterGTFSInfo.stops,
+                    ) """
+
+                # Use stop arrival time;
+                # fall back on scheduled time if not available
+                # stop times are provided in Unix Epoch format,
+                # but are mostly omitted from API response
                 try:
-                    ScheduledDepartureData = self.scheduled_departures[
-                        entity.trip_update.trip.trip_id
+                    this_stop_trip_schedule = self.static_departure_info[
+                        this_route_id
+                    ][direction_id][stop_id]
+                    scheduled_arrival_time = this_stop_trip_schedule[
+                        "arrival_time"
                     ]
-                    log_debug(
-                        [
-                            "Relevant Trip ID found",
-                            ScheduledDepartureData.string_departure_summary(),
-                        ],
-                        1,
-                    )
                 except KeyError:
-                    ScheduledDepartureData = None
+                    scheduled_arrival_time = 0
 
-                if self._route_delimiter is not None:
-                    route_id_split = entity.trip_update.trip.route_id.split(
-                        self._route_delimiter
+                if stop.arrival.time == 0:
+                    start_date = datetime.strptime(
+                        ThisTrip.start_date, "%Y%m%d"
                     )
-                    if route_id_split[0] == self._route_delimiter:
-                        route_id = entity.trip_update.trip.route_id
-                    else:
-                        route_id = route_id_split[0]
-                    log_debug(
-                        [
-                            "Feed Route ID",
-                            entity.trip_update.trip.route_id,
-                            "changed to",
-                            route_id,
-                        ],
-                        1,
+                    stop_time = int(
+                        scheduled_arrival_time + datetime.timestamp(start_date)
                     )
-
                 else:
-                    route_id = entity.trip_update.trip.route_id
+                    stop_time = stop.arrival.time
 
-                if route_id not in departure_times:
-                    departure_times[route_id] = {}
+                # delay provided in seconds
+                arrival_delay: int = stop.arrival.delay
+                stop_time += arrival_delay
 
-                if entity.trip_update.trip.direction_id is not None:
-                    direction_id = str(entity.trip_update.trip.direction_id)
-                else:
-                    direction_id = DEFAULT_DIRECTION
-                if direction_id not in departure_times[route_id]:
-                    departure_times[route_id][direction_id] = {}
-
-                for stop in entity.trip_update.stop_time_update:
-                    stop_id = stop.stop_id
-                    if not departure_times[route_id][direction_id].get(
-                        stop_id
-                    ):
-                        departure_times[route_id][direction_id][stop_id] = []
-                    # Use stop arrival time;
-                    # fall back on departure time if not available
-                    if stop.arrival.time == 0:
-                        stop_time = stop.departure.time
-                    else:
-                        stop_time = stop.arrival.time
-                    if ScheduledDepartureData:
-                        stop_time = (
-                            stop.arrival.time
-                            + ScheduledDepartureData.arrival_time
-                        )
-                        log_info(
-                            [
-                                "RELEVANT STOP!",
-                                "Stop:",
-                                stop_id,
-                                "Stop Sequence:",
-                                stop.stop_sequence,
-                                "Stop Time:",
-                                stop_time,
-                            ],
-                            2,
-                        )
-                    log_debug(
+                try:
+                    stop_time_timestamp = datetime.fromtimestamp(stop_time)
+                except OSError as e:
+                    log_error(
                         [
-                            "Stop:",
-                            stop_id,
-                            "Stop Sequence:",
-                            stop.stop_sequence,
-                            "Stop Time:",
+                            "stop_time ",
                             stop_time,
+                            "is not a valid format for converting to datetime",
+                            e,
                         ],
                         2,
                     )
-                    # Ignore arrival times in the past
-                    if due_in_minutes(datetime.fromtimestamp(stop_time)) >= 0:
-                        log_debug(
-                            [
-                                "Adding route ID",
-                                route_id,
-                                "trip ID",
-                                entity.trip_update.trip.trip_id,
-                                "direction ID",
-                                entity.trip_update.trip.direction_id,
-                                "stop ID",
-                                stop_id,
-                                "stop time",
-                                stop_time,
-                            ],
-                            3,
-                        )
-
-                        details = StopDetails(
-                            datetime.fromtimestamp(stop_time),
-                            vehicle_positions.get(
-                                entity.trip_update.trip.trip_id
-                            ),
-                        )
-                        departure_times[route_id][direction_id][
-                            stop_id
-                        ].append(details)
+                    stop_time_timestamp = datetime.utcnow()
+                log_debug(
+                    [
+                        "Stop:",
+                        stop_id,
+                        "Stop Sequence:",
+                        stop.stop_sequence,
+                        "Scheduled Stop Time:",
+                        scheduled_arrival_time,
+                        "Delay:",
+                        arrival_delay,
+                        "Stop Time:",
+                        stop_time,
+                        "(",
+                        stop_time_timestamp,
+                        ")",
+                    ],
+                    2,
+                )
+                # Ignore arrival times in the past
+                if due_in_mins(stop_time_timestamp) >= 0:
+                    log_debug(
+                        [
+                            "Adding route ID",
+                            route_id,
+                            "trip ID",
+                            this_trip_id,
+                            "direction ID",
+                            direction_id,
+                            "stop ID",
+                            stop_id,
+                            "stop time",
+                            stop_time_timestamp,
+                        ],
+                        3,
+                    )
+                    details = StopDetails(
+                        stop_time_timestamp,
+                        vehicle_positions.get(this_trip_id),
+                    )
+                    departure_times[route_id][direction_id][stop_id].append(
+                        details
+                    )
 
         # Sort by arrival time
         for route in departure_times:

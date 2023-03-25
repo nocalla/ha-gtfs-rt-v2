@@ -28,13 +28,63 @@ class StaticMasterGTFSInfo:
         # add agency data columns to routes data
         self.routes = pd.merge(self.routes, dataframes["agency"])
         _LOGGER.debug(self.routes.head())
-        # merge stop details and stop schedule
-        self.stops = pd.merge(self.stop_times, dataframes["stops"])
-        _LOGGER.debug(self.stops.head())
-        # fix timestamps
-        self.stop_times["arrival_time"] = pd.to_datetime(
-            self.stop_times["arrival_time"], format="%H:%M:%S"
+        _LOGGER.debug("Converting scheduled times...")
+        # fix timestamps - TODO proper comment once I work this out
+        self.stop_times["arrival_time"] = (
+            pd.to_timedelta(self.stop_times["arrival_time"])
+            .dt.total_seconds()
+            .astype(int)
         )
+
+        # merge dataframes
+        _LOGGER.debug("Merging stop and stoptimes dataframes...")
+        self.stops = pd.merge(self.stop_times, dataframes["stops"])
+        _LOGGER.debug(f"\n{self.stops.head()}\n{self.stops.shape}")
+        _LOGGER.debug("Merging routes and trips dataframes...")
+        self.routes = pd.merge(self.routes, self.trips)
+        _LOGGER.debug(f"\n{self.routes.head()}\n{self.routes.shape}")
+
+        _LOGGER.debug("Merging routes and stops dataframes...")
+        self.stops = pd.merge(self.stops, self.routes)
+        _LOGGER.debug(f"\n{self.stops.head()}\n{self.stops.shape}")
+        _LOGGER.debug("Generating nested departure_times dictionary...")
+        self.departure_info = df_to_nested_dict(
+            levels=["route_id", "direction_id", "stop_id"], df=self.stops
+        )
+
+
+def df_to_nested_dict(levels: list[str], df: pd.DataFrame) -> dict:
+    """
+    Convert a Pandas dataframe to a nested dictionary where the keys
+    are each item in "levels" in turn and each is a column header in the
+    dataframe.
+    ChatGPT wrote this function with a lot of input from @nocalla.
+
+    :param levels: Column headers to use as nested dictionary keys
+    :type levels: list[str]
+    :param df: Pandas dataframe to convert into nested dictionary
+    :type df: pd.DataFrame
+    :return: Nested dictionary in form {levels[0]:{levels[1]:{levels[2]:
+    {...{levels[n-1]:{other columns}}}}}}
+    :rtype: dict
+    """
+    df = df.drop_duplicates(subset=levels)
+    nested_dict = dict()
+    for row in df.itertuples(index=False):
+        temp_dict = nested_dict
+        for i, level in enumerate(levels[:-1]):
+            key = getattr(row, level)
+            if key not in temp_dict:
+                temp_dict[key] = {}
+            temp_dict = temp_dict[key]
+        key = getattr(row, levels[-1])
+        if key not in temp_dict:
+            temp_dict[key] = {}
+        temp_dict[key] = {
+            col: getattr(row, col) for col in df.columns if col not in levels
+        }
+
+    return nested_dict
 
 
 class RouteDetails:
@@ -132,32 +182,25 @@ class StopSchedule:
     - The field stop_headsign is populated with the first stop on the trip
     """
 
-    def __init__(self, identifier: str, df: pd.DataFrame) -> None:
+    def __init__(self, identifier: str, id_col: str, df: pd.DataFrame) -> None:
         self.details = (
             get_details_by_id(
                 identifier=identifier,
-                identifier_col="stop_code",
+                identifier_col=id_col,
                 df=df,
             )
             .set_index("trip_id")
             .to_dict(orient="index")
         )
-        _LOGGER.debug(self.details)
-        self.trip_ids = [str(k) for k in self.details.keys()]
-
-        # self.arrival_time = stoptimes_details["arrival_time"][0]
-        # self.departure_time = stoptimes_details["departure_time"][0]
-        # self.stop_id = stoptimes_details["stop_id"][0]
-        # self.stop_sequence = stoptimes_details["stop_sequence"][0]
-        # self.stop_headsign = stoptimes_details["stop_headsign"][0]
-        # self.pickup_type = stoptimes_details["pickup_type"][0]
-        # self.drop_off_type = stoptimes_details["drop_off_type"][0]
-        # self.timepoint = stoptimes_details["timepoint"][0]
 
     def get_trip_entry(self, trip_id: str):
-        trip_entry = self.details[trip_id]
-        trip_entry.update({"trip_id": trip_id})
-        _LOGGER.debug(trip_entry)
+        try:
+            trip_entry = self.details[trip_id]
+            trip_entry.update({"trip_id": trip_id})
+        except KeyError:
+            _LOGGER.error(f"trip_id '{trip_id}' not found in stop schedule.")
+            trip_entry = {"arrival_time": 0}
+        # _LOGGER.debug(trip_entry)
         return trip_entry
 
 
@@ -290,26 +333,24 @@ def get_dataframes(url: str) -> dict[str, pd.DataFrame]:
 def get_details_by_id(
     identifier: str, identifier_col: str, df: pd.DataFrame
 ) -> pd.DataFrame:
-    _LOGGER.debug(
-        f"Searching for {identifier_col} '{identifier}'\n{df.head()}\n"
-    )  # DEBUG
+    _LOGGER.debug(f"Searching for {identifier_col} '{identifier}'")  # DEBUG
     return df.loc[df[identifier_col] == identifier]
 
 
 def get_stop_departures(
     MasterGTFSInfo: StaticMasterGTFSInfo, route: str, stop_code: str
 ) -> dict[str, ScheduledDeparture]:
-    ThisStopSchedule = StopSchedule(
-        identifier=stop_code, df=MasterGTFSInfo.stops
+    """ThisStopSchedule = StopSchedule(
+        identifier=stop_code, id_col="stop_code", df=MasterGTFSInfo.stops
     )
     _LOGGER.debug(
         f"Getting departures for route {route} from stop {stop_code}..."
     )
     ThisRoute = RouteDetails(identifier=route, df=MasterGTFSInfo.routes)
-    scheduled_trip_ids = ThisStopSchedule.trip_ids
+    scheduled_trip_ids = ThisStopSchedule.trip_ids"""
 
     stop_departures = dict()
-    for trip_id in scheduled_trip_ids:
+    """ for trip_id in scheduled_trip_ids:
         ThisTrip = TripInfo(identifier=trip_id, df=MasterGTFSInfo.trips)
         stop_departures.update(
             {
@@ -319,7 +360,7 @@ def get_stop_departures(
                     Schedule=ThisStopSchedule,
                 )
             }
-        )
+        ) """
     return stop_departures
 
 
