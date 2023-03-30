@@ -20,7 +20,7 @@ from sensor import (
     CONF_ICON,
     CONF_ROUTE,
     CONF_ROUTE_DELIMITER,
-    CONF_ROUTE_NAME,
+    CONF_ROUTE_LOOKUP,
     CONF_SERVICE_TYPE,
     CONF_STOP_CODE,
     CONF_STOP_ID,
@@ -29,6 +29,9 @@ from sensor import (
     CONF_X_API_KEY,
     setup_platform,
 )
+
+# import time
+
 
 sys.path.append("lib")
 _LOGGER = logging.getLogger(__name__)
@@ -54,10 +57,10 @@ PLATFORM_SCHEMA = Schema(
                 CONF_NAME: str,
                 CONF_STOP_ID: str,
                 CONF_ROUTE: str,
-                Optional(CONF_DIRECTION_ID): str,
+                Optional(CONF_DIRECTION_ID): bool,
                 Optional(CONF_SERVICE_TYPE): str,
                 Optional(CONF_ICON): str,
-                CONF_ROUTE_NAME: str,
+                CONF_ROUTE_LOOKUP: str,
                 CONF_STOP_CODE: str,
             }
         ],
@@ -104,6 +107,8 @@ if __name__ == "__main__":
         PLATFORM_SCHEMA.validate(configuration)
         logging.info("Input file configuration is valid.")
         setup_platform("", configuration, add_devices, None)
+        # time.sleep(60)  # test out repeating
+        # setup_platform("", configuration, add_devices, None)
 
     except SchemaError as se:
         logging.info("Input file configuration invalid: {}".format(se))
