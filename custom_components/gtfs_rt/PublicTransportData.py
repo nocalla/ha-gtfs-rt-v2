@@ -6,7 +6,13 @@ import requests
 from google.transit import gtfs_realtime_pb2
 from homeassistant.util import Throttle
 from StaticTimetable import GTFSCache, StaticMasterGTFSInfo
-from utils import debug_dataframe, log_debug, log_error, log_info
+from utils import (
+    debug_dataframe,
+    get_time_delta,
+    log_debug,
+    log_error,
+    log_info,
+)
 
 MIN_TIME_BETWEEN_UPDATES = timedelta(seconds=60)
 
@@ -149,12 +155,12 @@ class PublicTransportData:
         self._vehicle_position_url = vehicle_position_url
         self._route_delimiter = route_delimiter
         if api_key is not None:
-            self._headers = {"Authorization": api_key}
+            self._headers = {"Authorisation": api_key}
         elif x_api_key is not None:
             self._headers = {"x-api-key": x_api_key}
         else:
             self._headers = None
-        self.info_df = dict()
+        self.info_df = pd.DataFrame()
         self.CachedGTFSData = GTFSCache()
 
     @Throttle(MIN_TIME_BETWEEN_UPDATES)
@@ -186,10 +192,7 @@ class PublicTransportData:
 
         # make our dataframes!
         trip_update_df = gtfs_tripupdate_to_df(feed_entities)
-        log_debug(
-            [debug_dataframe(trip_update_df, "Trip Update")],
-            0,
-        )
+        debug_dataframe(trip_update_df, "Trip Update")
 
         v_feed_entities = get_gtfs_feed_entities(
             url=self._vehicle_position_url,
@@ -198,36 +201,25 @@ class PublicTransportData:
         )
 
         vehicle_info_df = gtfs_vehicleinfo_to_df(v_feed_entities)
-        log_debug(
-            [debug_dataframe(vehicle_info_df, "Vehicle Info")],
-            0,
-        )
+        debug_dataframe(vehicle_info_df, "Vehicle Info")
 
         # add vehicle to trip update info TODO: fix merging- some missing?
         trip_update_df = pd.merge(
             left=trip_update_df, right=vehicle_info_df, how="left"
         )
-        log_debug(
-            [debug_dataframe(trip_update_df, "Merged Trip & Vehicle Info")],
-            0,
-        )
+        debug_dataframe(trip_update_df, "Merged Trip & Vehicle Info")
         # get static timetable data
         timetable_df = StaticMasterGTFSInfo(
             url=self.static_gtfs_url, CachedData=self.CachedGTFSData
         ).departure_info
-
-        log_debug(
-            [debug_dataframe(timetable_df, "Static Timetable Info")],
-            0,
-        )
+        debug_dataframe(timetable_df, "Static Timetable Info")
         # merge live and static data
         trip_update_df = pd.merge(
             trip_update_df, timetable_df, how="left", indicator="source"
         )
-        log_debug(
-            [debug_dataframe(trip_update_df, "Merged live and static info")],
-            0,
-        )
+        debug_dataframe(trip_update_df, "Merged live and static info")
+
+        # need to split route_ids if there's a delimiter
 
         # do some maths on the dataframe
         # work out stop_time
@@ -246,18 +238,60 @@ class PublicTransportData:
             ),
             axis=1,
         )
-        log_debug(
-            [debug_dataframe(trip_update_df, "Stop Time Calculation")],
-            0,
-        )
-        # remove rows where stop_time is in the past
+        debug_dataframe(trip_update_df, "Stop Time Calculation")
 
-        now = pd.to_datetime("now", utc=True)
-        log_debug([f"Removing times before {now}..."], 0)
-        trip_update_df = trip_update_df[(trip_update_df["stop_time"] >= now)]
+        # remove rows where stop_time is in the past
+        log_debug(["Removing times in the past..."], 0)
+
+        # trip_update_df = trip_update_df[(trip_update_df["stop_time"] >= now)]
+
+        trip_update_df = trip_update_df[
+            trip_update_df["stop_time"].apply(get_time_delta) >= 0
+        ]
         log_debug(
             [debug_dataframe(trip_update_df, "Filter out past Stop Times")],
             0,
         )
         # return completed dataframe
         self.info_df = trip_update_df
+
+    def filter_df(
+        self, filters: dict, order_by: str, order_ascending: bool
+    ) -> dict:
+        """
+        Filter a dataframe using the provided "filters" and return a numbered
+        dictionary where each top-level entry corresponds to a service.
+        The dictionary top level is in order of the column specified by the
+        "order_by" parameter.
+
+        :param filters: Dictionary mapping column name to desired value,
+        can be any number of columns.
+        :type filters: dict
+        :param order_by: Column to sort dataframe with.
+        :type order_by: str
+        :param order_ascending: Whether to sort ascending or descending.
+        :type order_ascending: bool
+        :return: Nested dictionary in the following form representing the
+        original dataframe after filters have been applied.
+        {0:{col1:x, col2:y...}, 1:{col1:x, col2:y...}...}
+        The top level represents the order of the dataframe rows as defined by
+        the "order_by" parameter.
+        :rtype: dict
+        """
+        query_str = " and ".join(
+            [
+                f"{key} == '{value}'"
+                if isinstance(value, str)
+                else f"{key} == {value!r}"
+                for key, value in filters.items()
+            ]
+        )
+        log_debug([f"Filtering data using filter query {query_str}..."], 0)
+
+        filtered_df = (
+            self.info_df.query(query_str)
+            .sort_values(by=[order_by], ascending=order_ascending)
+            .reset_index()
+        )
+        debug_dataframe(filtered_df, "Filtered data")
+        return filtered_df.to_dict(orient="index")

@@ -1,14 +1,13 @@
-from datetime import datetime
-
 import homeassistant.helpers.config_validation as cv
-import homeassistant.util.dt as dt_util
+
+# import homeassistant.util.dt as dt_util
 import pandas as pd
 import voluptuous as vol
 from homeassistant.components.sensor import PLATFORM_SCHEMA
 from homeassistant.const import ATTR_LATITUDE, ATTR_LONGITUDE, CONF_NAME
 from homeassistant.helpers.entity import Entity
 from PublicTransportData import PublicTransportData
-from utils import debug_dataframe, log_debug, log_info
+from utils import get_time_delta, log_debug, log_info
 
 ATTR_STOP_ID = "Stop ID"
 ATTR_ROUTE = "Route"
@@ -73,12 +72,6 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
 )
 
 
-def due_in_mins(time: datetime):
-    """Get the remaining minutes from now until a given datetime object."""
-    diff = time - dt_util.now().replace(tzinfo=None)
-    return int(diff.total_seconds() / 60)
-
-
 def setup_platform(hass, config, add_devices, discovery_info=None):
     """Get the public transport sensor."""
 
@@ -139,25 +132,22 @@ class PublicTransportSensor(Entity):
 
     def _get_next_services(
         self,
-    ) -> pd.DataFrame:
-        log_debug(["Filtering data..."], 0)
+    ) -> dict:
+        filters = {
+            "stop_id": self._stop,
+            "direction_id": self._direction,
+            "route_id": self._route,
+        }
 
-        # this filter is occasionally returning nothing for some reason
-        # - maybe a datatype matching issue? Or agressive filtering?
-        filtered_df = self.data.info_df[
-            (self.data.info_df["stop_id"] == self._stop)
-            & (self.data.info_df["direction_id"] == self._direction)
-            & (self.data.info_df["route_id"] == self._route)
-        ].sort_values(by=["arrival_time"], ascending=True)
-
-        log_debug([debug_dataframe(filtered_df, "Filtered data")], 0)
-        return filtered_df
+        return self.data.filter_df(
+            filters, order_by="arrival_time", order_ascending=True
+        )
 
     @property
     def state(self):
         """Return the state of the sensor."""
         return (
-            due_in_mins(self.next_services.iloc[0]["stop_time"])
+            get_time_delta(self.next_services[0]["stop_time"])
             if len(self.next_services) > 0
             else "-"
         )
@@ -173,7 +163,7 @@ class PublicTransportSensor(Entity):
             ATTR_DIRECTION_ID: self._direction,
         }
         if len(self.next_services) > 1:
-            second_service = self.next_services.iloc[1]
+            second_service = self.next_services[1]
             attrs[ATTR_NEXT_UP] = second_service["stop_time"].strftime(
                 TIME_STR_FORMAT
             )
@@ -181,7 +171,7 @@ class PublicTransportSensor(Entity):
             attrs[ATTR_NEXT_UP] = "-"
 
         if len(self.next_services) > 0:
-            next_service = self.next_services.iloc[0]
+            next_service = self.next_services[0]
             attrs[ATTR_DUE_AT] = next_service["stop_time"].strftime(
                 TIME_STR_FORMAT
             )
@@ -209,9 +199,9 @@ class PublicTransportSensor(Entity):
 
     def update(self):
         """Get the latest data from GTFS API and update the states."""
+        log_debug(["Updating sensor..."], 0)
         self.data.update()
         self.next_services = self._get_next_services()
-
         # Logging Sensor Update Info
         log_info(["Sensor Update:"], 0)
 
