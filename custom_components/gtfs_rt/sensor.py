@@ -141,6 +141,7 @@ class PublicTransportSensor(Entity):
         self,
     ) -> pd.DataFrame:
         log_debug(["Filtering data..."], 0)
+
         # this filter is occasionally returning nothing for some reason
         # - maybe a datatype matching issue? Or agressive filtering?
         filtered_df = self.data.info_df[

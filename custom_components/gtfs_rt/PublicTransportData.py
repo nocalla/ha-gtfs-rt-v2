@@ -75,7 +75,9 @@ def gtfs_tripupdate_to_df(
             source_dict["stop_id"].append(stop.stop_id)
             source_dict["stop_sequence"].append(stop.stop_sequence)
             source_dict["live_arrival_time"].append(stop.arrival.time)
-            source_dict["arrival_delay"].append(stop.arrival.delay)
+            source_dict["arrival_delay"].append(
+                pd.to_timedelta(stop.arrival.delay, unit="s")
+            )
     df = pd.DataFrame(source_dict)
 
     # convert all object types to categories
