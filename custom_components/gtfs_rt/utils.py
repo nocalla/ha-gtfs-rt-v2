@@ -46,7 +46,7 @@ def debug_dataframe(df: pd.DataFrame, name: str = "") -> None:
     log_debug([df_string], 0)
 
 
-def get_time_delta(time: datetime) -> int:
+def get_time_delta(time: float) -> int:
     """
     Get the remaining minutes from now until a given datetime object.
 
@@ -56,19 +56,19 @@ def get_time_delta(time: datetime) -> int:
     :rtype: int
     """
     local_timezone = tz.tzlocal()
-    now = datetime.now(tz=local_timezone)
-    diff = time - now  # dt_util.now().replace(tzinfo=None)
+    now = datetime.now(tz=local_timezone).timestamp()
     try:
+        diff = int(time - now)  # dt_util.now().replace(tzinfo=None)
         log_debug(
             [
                 "Calculated time difference",
-                int(diff.total_seconds() / 60),
+                int(diff / 60),
                 now,
                 time,
             ],
             1,
         )
-        return int(diff.total_seconds() / 60)
+        return int(diff / 60)
     except ValueError as e:
         log_error(["Error calculating time difference", e, now, time], 1)
         return -1

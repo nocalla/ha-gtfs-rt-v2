@@ -18,6 +18,18 @@ MIN_TIME_BETWEEN_UPDATES = timedelta(seconds=60)
 
 
 def get_gtfs_feed_entities(url: str, headers, label: str):
+    """
+    Returns a list of GTFS entities via an API endpoint.
+
+    :param url: API endpoint
+    :type url: str
+    :param headers: Headers provided to endpoint.
+    :type headers: _type_
+    :param label: Label for logging purposes.
+    :type label: str
+    :return: List of GTFS entities from API.
+    :rtype: _type_
+    """
     feed = gtfs_realtime_pb2.FeedMessage()  # type: ignore
     response = requests.get(url, headers=headers, timeout=20)
     log_debug([f"Getting {label} info from API..."], 0)
@@ -43,6 +55,7 @@ def gtfs_tripupdate_to_df(
     """
     Convert a list of GTFS feed entities to a Pandas dataframe where the
     columns correspond to the Trip data.
+
     :param entities: List of GTFS feed objects
     :type entities: list[gtfs_realtime_pb2.DESCRIPTOR]
     :return: Pandas dataframe of GTFS trip data
@@ -56,11 +69,17 @@ def gtfs_tripupdate_to_df(
         trip_id = ThisTrip.trip_id
         route_id = ThisTrip.route_id
 
+        # convert start date and time to Unix time
+        # TODO - adjust start date depending on timezone/Daylight Savings?
         start_date = datetime.strptime(
             ThisTrip.start_date,
             "%Y%m%d",
+        ).timestamp()
+        start_time = start_time = (
+            pd.to_timedelta(ThisTrip.start_time)
+            .to_pytimedelta()
+            .total_seconds()
         )
-        start_time = pd.to_timedelta(ThisTrip.start_time)
 
         schedule_relationship = ThisTrip.schedule_relationship
         direction_id = ThisTrip.direction_id
@@ -82,7 +101,8 @@ def gtfs_tripupdate_to_df(
             source_dict["stop_sequence"].append(stop.stop_sequence)
             source_dict["live_arrival_time"].append(stop.arrival.time)
             source_dict["arrival_delay"].append(
-                pd.to_timedelta(stop.arrival.delay, unit="s")
+                stop.arrival.delay
+                # pd.to_timedelta(stop.arrival.delay, unit="s")
             )
     df = pd.DataFrame(source_dict)
 
@@ -102,6 +122,7 @@ def gtfs_vehicleinfo_to_df(
     """
     Convert a list of GTFS feed entities to a Pandas dataframe where the
     columns correspond to the Vehicle data.
+
     :param entities: List of GTFS feed objects
     :type entities: list[gtfs_realtime_pb2.DESCRIPTOR]
     :return: Pandas dataframe of GTFS vehicle data
@@ -138,7 +159,7 @@ def gtfs_vehicleinfo_to_df(
 
 
 class PublicTransportData:
-    """The Class for handling the data retrieval."""
+    """The Class for handling API data retrieval."""
 
     def __init__(
         self,
@@ -179,6 +200,7 @@ class PublicTransportData:
             0,
         )
 
+        # create trip update dataframe
         # Use list comprehension to filter entities with trip_update field
         feed_entities = [
             entity
@@ -189,17 +211,15 @@ class PublicTransportData:
             )
             if entity.HasField("trip_update")
         ]
-
-        # make our dataframes!
         trip_update_df = gtfs_tripupdate_to_df(feed_entities)
         debug_dataframe(trip_update_df, "Trip Update")
 
+        # create vehicle info dataframe
         v_feed_entities = get_gtfs_feed_entities(
             url=self._vehicle_position_url,
             headers=self._headers,
             label="vehicle positions",
         )
-
         vehicle_info_df = gtfs_vehicleinfo_to_df(v_feed_entities)
         debug_dataframe(vehicle_info_df, "Vehicle Info")
 
@@ -208,11 +228,13 @@ class PublicTransportData:
             left=trip_update_df, right=vehicle_info_df, how="left"
         )
         debug_dataframe(trip_update_df, "Merged Trip & Vehicle Info")
+
         # get static timetable data
         timetable_df = StaticMasterGTFSInfo(
             url=self.static_gtfs_url, CachedData=self.CachedGTFSData
         ).departure_info
         debug_dataframe(timetable_df, "Static Timetable Info")
+
         # merge live and static data
         trip_update_df = pd.merge(
             trip_update_df, timetable_df, how="left", indicator="source"
@@ -220,22 +242,22 @@ class PublicTransportData:
         debug_dataframe(trip_update_df, "Merged live and static info")
 
         # need to split route_ids if there's a delimiter
+        if self._route_delimiter is not None:
+            trip_update_df["route_id", "route_id_split"] = trip_update_df[
+                "route_id"
+            ].str.split(self._route_delimiter, expand=True)
 
         # do some maths on the dataframe
+        # note all values should be in seconds
         # work out stop_time
         # stop_time = arrival_time + start_date + arrival_delay
         # OR live_arrival_time if not zero
         trip_update_df["stop_time"] = trip_update_df.apply(
-            lambda row: pd.to_datetime(
-                row["live_arrival_time"], unit="s", utc=True
-            )
+            lambda row: row["live_arrival_time"]
             if row["live_arrival_time"] != 0
-            else pd.to_datetime(
-                row["arrival_time"]
-                + row["start_date"]
-                + pd.to_timedelta(row["arrival_delay"], unit="s"),
-                utc=True,
-            ),
+            else row["arrival_time"]
+            + row["start_date"]
+            + row["arrival_delay"],
             axis=1,
         )
         debug_dataframe(trip_update_df, "Stop Time Calculation")

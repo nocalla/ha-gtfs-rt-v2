@@ -135,7 +135,7 @@ class PublicTransportSensor(Entity):
     ) -> dict:
         filters = {
             "stop_id": self._stop,
-            "direction_id": self._direction,
+            # "direction_id": self._direction,
             "route_id": self._route,
         }
 

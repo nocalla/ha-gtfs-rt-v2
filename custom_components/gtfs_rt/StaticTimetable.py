@@ -99,8 +99,13 @@ def process_dataframes(dataframes: dict[str, pd.DataFrame]) -> pd.DataFrame:
     _LOGGER.debug("Merging stop and stoptimes dataframes...")
     stops = pd.merge(stop_times, dataframes["stops"], how="left")
     _LOGGER.debug("Converting arrival and departure times to time deltas...")
-    stops["arrival_time"] = pd.to_timedelta(stops["arrival_time"])
-    stops["departure_time"] = pd.to_timedelta(stops["departure_time"])
+    stops["arrival_time"] = pd.to_timedelta(stops["arrival_time"]).astype(
+        "int64"
+    )/10**9
+    stops["departure_time"] = pd.to_timedelta(stops["departure_time"]).astype(
+        "int64"
+    )/10**9
+
     _LOGGER.debug("Merging routes and trips dataframes...")
     routes = pd.merge(trips, routes, how="left")
     _LOGGER.debug("Merging routes and stops dataframes...")
@@ -161,16 +166,14 @@ def get_dataframes(url: str) -> dict[str, pd.DataFrame]:
             _LOGGER.debug(f"Creating dataframe from {filename}...")
             with zip_file.open(filename, "r") as file:
                 # Create a Pandas DataFrame from the file
-                dataframe = pd.read_csv(file, dtype=datatypes)
-                # # convert objects to categories
-                # dataframe[
-                #     dataframe.select_dtypes(["object"]).columns
-                # ] = dataframe.select_dtypes(["object"]).apply(
-                #     lambda x: x.astype("category")
-                # )
+                df = pd.read_csv(file, dtype=datatypes)
+                # convert objects to categories
+                df[df.select_dtypes(["object"]).columns] = df.select_dtypes(
+                    ["object"]
+                ).apply(lambda x: x.astype("category"))
 
                 # Add the DataFrame to the dictionary using filename as key
-                dataframes[filename[:-4]] = dataframe
+                dataframes[filename[:-4]] = df
 
     _LOGGER.info("Dataframes created.")
     return dataframes
