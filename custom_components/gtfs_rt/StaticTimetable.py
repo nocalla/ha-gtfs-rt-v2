@@ -151,7 +151,6 @@ def get_dataframes(url: str) -> dict[str, pd.DataFrame]:
         {
             "direction_id": bool,
             "stop_sequence": "Int64",
-            "stop_code": "Int64",
             "stop_lat": float,
             "stop_lon": float,
             "service_id": "Int64",
