@@ -26,6 +26,15 @@ def log_debug(data: list, indent_level: int) -> None:
 
 
 def debug_dataframe(df: pd.DataFrame, name: str = "") -> None:
+    """
+    Logs information about the specified dataframe and displays some
+    sample entries.
+
+    :param df: Dataframe to provide information on.
+    :type df: pd.DataFrame
+    :param name: Label to show in log, defaults to "".
+    :type name: str, optional
+    """
     try:
         df_info_df = pd.concat(
             objs=[
