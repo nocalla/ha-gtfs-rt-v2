@@ -3,16 +3,11 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 import requests
+from dateutil import tz
 from google.transit import gtfs_realtime_pb2
 from homeassistant.util import Throttle
 from StaticTimetable import GTFSCache, StaticMasterGTFSInfo
-from utils import (
-    debug_dataframe,
-    get_time_delta,
-    log_debug,
-    log_error,
-    log_info,
-)
+from utils import debug_dataframe, log_debug, log_error, log_info
 
 MIN_TIME_BETWEEN_UPDATES = timedelta(seconds=60)
 
@@ -70,7 +65,6 @@ def gtfs_tripupdate_to_df(
         route_id = ThisTrip.route_id
 
         # convert start date and time to Unix time
-        # TODO - adjust start date depending on timezone/Daylight Savings?
         start_date = datetime.strptime(
             ThisTrip.start_date,
             "%Y%m%d",
@@ -88,6 +82,7 @@ def gtfs_tripupdate_to_df(
         for stop in ThisTripData.stop_time_update:
             # Overall entity info
             source_dict["trip_entity_id"].append(entity_id)
+            source_dict["timestamp"].append(timestamp)
             # Trip-specific Information
             source_dict["trip_id"].append(trip_id)
             source_dict["route_id"].append(route_id)
@@ -255,21 +250,21 @@ class PublicTransportData:
         trip_update_df["stop_time"] = trip_update_df.apply(
             lambda row: row["live_arrival_time"]
             if row["live_arrival_time"] != 0
-            else row["arrival_time"]
+            else row["scheduled_arrival_time"]
             + row["start_date"]
             + row["arrival_delay"],
             axis=1,
-        )
+        ).fillna(0)
+        # generate datetime object in local timezone
+        trip_update_df["stop_time_dt"] = pd.to_datetime(
+            trip_update_df["stop_time"], unit="s", utc=True
+        ).dt.tz_convert(tz=tz.tzlocal())
         debug_dataframe(trip_update_df, "Stop Time Calculation")
 
         # remove rows where stop_time is in the past
         log_debug(["Removing times in the past..."], 0)
 
-        # trip_update_df = trip_update_df[(trip_update_df["stop_time"] >= now)]
-
-        trip_update_df = trip_update_df[
-            trip_update_df["stop_time"].apply(get_time_delta) >= 0
-        ]
+        trip_update_df = trip_update_df.query("stop_time - timestamp >=0")
         log_debug(
             [debug_dataframe(trip_update_df, "Filter out past Stop Times")],
             0,
