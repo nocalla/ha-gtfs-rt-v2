@@ -9,7 +9,7 @@ _LOGGER = logging.getLogger(__name__)
 
 def log_info(data: list, indent_level: int) -> None:
     indents = "   " * indent_level
-    info_str = f"{indents}{': '.join(str(x) for x in data)}"
+    info_str = f"\t{indents}{': '.join(str(x) for x in data)}"
     _LOGGER.info(info_str)
 
 
@@ -47,12 +47,18 @@ def debug_dataframe(df: pd.DataFrame, name: str = "") -> None:
     except ValueError:
         df_info_df = df.dtypes
 
-    df_string = (
+    df_string = df_info_df.to_string(
+        line_width=79,
+        max_colwidth=20,
+        show_dimensions=True,
+    )
+
+    debug_string = (
         f"\n\nTransposed Dataframe - {name} "
         f"(Rows: {df.shape[0]}, Columns: {df.shape[1]})"
-        f"{df_info_df.to_string(line_width=79, show_dimensions=True,)}\n"
+        f"{df_string}\n"
     )
-    log_debug([df_string], 0)
+    log_debug([debug_string], 0)
 
 
 def get_time_delta(time: float) -> int:
