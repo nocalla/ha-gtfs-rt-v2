@@ -12,7 +12,7 @@ from utils import debug_dataframe, log_debug, log_error, log_info
 MIN_TIME_BETWEEN_UPDATES = timedelta(seconds=60)
 
 
-def get_gtfs_feed_entities(url: str, headers, label: str):
+def get_gtfs_feed_entities(url: str, headers, label: str) -> list:
     """
     Returns a list of GTFS entities via an API endpoint.
 
@@ -23,7 +23,7 @@ def get_gtfs_feed_entities(url: str, headers, label: str):
     :param label: Label for logging purposes.
     :type label: str
     :return: List of GTFS entities from API.
-    :rtype: _type_
+    :rtype: list
     """
     feed = gtfs_realtime_pb2.FeedMessage()  # type: ignore
     response = requests.get(url, headers=headers, timeout=20)
@@ -191,7 +191,8 @@ class PublicTransportData:
             )
             if entity.HasField("trip_update")
         ]
-        trip_update_df = gtfs_tripupdate_to_df(feed_entities)
+
+        trip_update_df = gtfs_data_to_df(feed_entities, label="trip")
         debug_dataframe(trip_update_df, "Trip Update")
 
         # create vehicle info dataframe
@@ -200,7 +201,7 @@ class PublicTransportData:
             headers=self._headers,
             label="vehicle positions",
         )
-        vehicle_info_df = gtfs_vehicleinfo_to_df(v_feed_entities)
+        vehicle_info_df = gtfs_data_to_df(v_feed_entities, label="vehicle")
         debug_dataframe(vehicle_info_df, "Vehicle Info")
 
         # add vehicle to trip update info TODO: fix merging- some missing?
@@ -232,6 +233,7 @@ class PublicTransportData:
         # work out stop_time
         # stop_time = arrival_time + start_date + arrival_delay
         # OR live_arrival_time if not zero
+        # set value as 0 if no valid time produced
         trip_update_df["stop_time"] = trip_update_df.apply(
             lambda row: row["live_arrival_time"]
             if row["live_arrival_time"] != 0
