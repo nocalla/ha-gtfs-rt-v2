@@ -246,6 +246,8 @@ class PublicTransportData:
         ).dt.tz_convert(tz=tz.tzlocal())
         debug_dataframe(trip_update_df, "Stop Time Calculation")
 
+        # TODO Fix - this isn't working - possibly going 1 hr too strict
+        """
         # remove rows where stop_time is in the past
         log_debug(["Removing times in the past..."], 0)
 
@@ -254,6 +256,7 @@ class PublicTransportData:
             [debug_dataframe(trip_update_df, "Filter out past Stop Times")],
             0,
         )
+        """
         # return completed dataframe
         self.info_df = trip_update_df
 
