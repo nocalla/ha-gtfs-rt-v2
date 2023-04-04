@@ -55,13 +55,13 @@ PLATFORM_SCHEMA = Schema(
         CONF_DEPARTURES: [
             {
                 CONF_NAME: str,
-                CONF_STOP_ID: str,
-                CONF_ROUTE: str,
+                Optional(CONF_STOP_ID): str,
+                Optional(CONF_ROUTE): str,
                 Optional(CONF_DIRECTION_ID): bool,
                 Optional(CONF_SERVICE_TYPE): str,
                 Optional(CONF_ICON): str,
-                CONF_ROUTE_LOOKUP: str,
-                CONF_STOP_CODE: str,
+                Optional(CONF_ROUTE_LOOKUP): str,
+                Optional(CONF_STOP_CODE): str,
             }
         ],
     }

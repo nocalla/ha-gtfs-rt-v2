@@ -172,8 +172,6 @@ class PublicTransportData:
                 self._trip_update_url,
                 "\nvehicle_position_url",
                 self._vehicle_position_url,
-                "\nroute_delimiter",
-                self._route_delimiter,
                 "\nheader",
                 self._headers,
             ],

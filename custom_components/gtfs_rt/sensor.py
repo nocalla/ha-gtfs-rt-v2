@@ -52,8 +52,12 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_DEPARTURES): [
             {
                 vol.Required(CONF_NAME): cv.string,
-                vol.Required(CONF_STOP_ID): cv.string,
-                vol.Required(CONF_ROUTE): cv.string,
+                vol.Optional(
+                    CONF_STOP_ID, default=""  # type: ignore
+                ): cv.string,
+                vol.Optional(
+                    CONF_ROUTE, default=""  # type: ignore
+                ): cv.string,
                 vol.Optional(
                     CONF_DIRECTION_ID,
                     default=DEFAULT_DIRECTION,  # type: ignore
@@ -64,8 +68,12 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
                 vol.Optional(
                     CONF_SERVICE_TYPE, default=DEFAULT_SERVICE  # type: ignore
                 ): cv.string,
-                vol.Required(CONF_ROUTE_LOOKUP): cv.string,
-                vol.Required(CONF_STOP_CODE): cv.string,
+                vol.Optional(
+                    CONF_ROUTE_LOOKUP, default=""  # type: ignore
+                ): cv.string,
+                vol.Optional(
+                    CONF_STOP_CODE, default=""  # type: ignore
+                ): cv.string,
             }
         ],
     }
@@ -95,7 +103,8 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
                 icon=departure.get(CONF_ICON),
                 service_type=departure.get(CONF_SERVICE_TYPE),
                 name=departure.get(CONF_NAME),
-                # TODO add ROUTE_NAME and STOP_CODE
+                route_name=departure.get(CONF_ROUTE_LOOKUP),
+                stop_code=departure.get(CONF_STOP_CODE),
             )
         )
 
@@ -114,6 +123,8 @@ class PublicTransportSensor(Entity):
         icon: str,
         service_type: str,
         name: str,
+        route_name: str,
+        stop_code: str,
     ):
         """Initialize the sensor."""
         self.data = data
@@ -123,6 +134,8 @@ class PublicTransportSensor(Entity):
         self._direction = direction
         self._icon = icon
         self._service_type = service_type
+        self.route_name = route_name
+        self.stop_code = stop_code
         self.next_services = pd.DataFrame()
         self.update()
 
@@ -135,8 +148,10 @@ class PublicTransportSensor(Entity):
     ) -> dict:
         filters = {
             "stop_id": self._stop,
-            # "direction_id": self._direction,
+            "direction_id": self._direction,
             "route_id": self._route,
+            "route_short_name": self.route_name,
+            "stop_code": self.stop_code,
         }
 
         return self.data.filter_df(
@@ -155,7 +170,7 @@ class PublicTransportSensor(Entity):
     @property
     def extra_state_attributes(self):
         # """Return the state attributes."""
-        ATTR_NEXT_UP = "Next " + self._service_type
+        ATTR_NEXT_UP = f"Next {self._service_type}"
         attrs = {
             ATTR_DUE_IN: self.state,
             ATTR_STOP_ID: self._stop,
@@ -164,7 +179,7 @@ class PublicTransportSensor(Entity):
         }
         if len(self.next_services) > 1:
             second_service = self.next_services[1]
-            attrs[ATTR_NEXT_UP] = second_service["stop_time"].strftime(
+            attrs[ATTR_NEXT_UP] = second_service["stop_time_dt"].strftime(
                 TIME_STR_FORMAT
             )
         else:
@@ -172,7 +187,7 @@ class PublicTransportSensor(Entity):
 
         if len(self.next_services) > 0:
             next_service = self.next_services[0]
-            attrs[ATTR_DUE_AT] = next_service["stop_time"].strftime(
+            attrs[ATTR_DUE_AT] = next_service["stop_time_dt"].strftime(
                 TIME_STR_FORMAT
             )
             attrs[ATTR_LATITUDE] = next_service["vehicle_latitude"]
@@ -202,6 +217,7 @@ class PublicTransportSensor(Entity):
         log_debug(["Updating sensor..."], 0)
         self.data.update()
         self.next_services = self._get_next_services()
+        log_debug(["Dictionary test ", self.next_services], 0) # debug
         # Logging Sensor Update Info
         log_info(["Sensor Update:"], 0)
 
