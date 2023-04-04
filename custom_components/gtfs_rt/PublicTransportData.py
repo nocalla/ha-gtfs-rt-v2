@@ -263,7 +263,7 @@ class PublicTransportData:
         self, filters: dict, order_by: str, order_ascending: bool
     ) -> dict:
         """
-        Filter a dataframe using the provided "filters" and return a numbered
+        Filter a dataframe using the provided filters and return a numbered
         dictionary where each top-level entry corresponds to a service.
         The dictionary top level is in order of the column specified by the
         "order_by" parameter.
@@ -284,13 +284,16 @@ class PublicTransportData:
         """
         query_str = " and ".join(
             [
-                f"{key} == '{value}'"
-                if isinstance(value, str)
+                f"{key}.astype('{type(value).__name__}') == {value!r}"
+                if pd.api.types.is_categorical_dtype(self.info_df[key])
                 else f"{key} == {value!r}"
+                if isinstance(value, str)
+                else f"{key} == {value}"
                 for key, value in filters.items()
+                if value is not None
             ]
         )
-        log_debug([f"Filtering data using filter query {query_str}..."], 0)
+        log_debug([f"Filtering data using filter query ({query_str})..."], 0)
 
         filtered_df = (
             self.info_df.query(query_str)
