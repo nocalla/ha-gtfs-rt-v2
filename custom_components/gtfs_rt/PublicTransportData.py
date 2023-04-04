@@ -44,108 +44,93 @@ def get_gtfs_feed_entities(url: str, headers, label: str):
     return feed.entity
 
 
-def gtfs_tripupdate_to_df(
+def gtfs_data_to_df(
     entities: list[gtfs_realtime_pb2.DESCRIPTOR],
+    label: str,
 ) -> pd.DataFrame:
     """
     Convert a list of GTFS feed entities to a Pandas dataframe where the
-    columns correspond to the Trip data.
+    columns correspond to the desired data.
 
     :param entities: List of GTFS feed objects
     :type entities: list[gtfs_realtime_pb2.DESCRIPTOR]
-    :return: Pandas dataframe of GTFS trip data
+    :param label: String denoting what type of data the request deals with.
+    :type label: str
+    :return: Pandas dataframe of GTFS data
     :rtype: pd.DataFrame
     """
     source_dict = defaultdict(list)
     for entity in entities:
         entity_id = entity.id
-        ThisTripData = entity.trip_update
-        ThisTrip = ThisTripData.trip
-        trip_id = ThisTrip.trip_id
-        route_id = ThisTrip.route_id
 
-        # convert start date and time to Unix time
-        start_date = datetime.strptime(
-            ThisTrip.start_date,
-            "%Y%m%d",
-        ).timestamp()
-        start_time = start_time = (
-            pd.to_timedelta(ThisTrip.start_time)
-            .to_pytimedelta()
-            .total_seconds()
+        if label == "trip":
+            ThisTripData = entity.trip_update
+            timestamp = ThisTripData.timestamp
+            ThisTrip = ThisTripData.trip
+            trip_id = ThisTrip.trip_id
+            route_id = ThisTrip.route_id
+            # convert start date and time to Unix time
+            start_date = datetime.strptime(
+                ThisTrip.start_date,
+                "%Y%m%d",
+            ).timestamp()
+            start_time = start_time = (
+                pd.to_timedelta(ThisTrip.start_time)
+                .to_pytimedelta()
+                .total_seconds()
+            )
+
+            schedule_relationship = ThisTrip.schedule_relationship
+            direction_id = ThisTrip.direction_id
+            vehicle_id = ThisTripData.vehicle.id
+
+            for stop in ThisTripData.stop_time_update:
+                # Overall entity info
+                source_dict["trip_entity_id"].append(entity_id)
+                source_dict["timestamp"].append(timestamp)
+                # Trip-specific Information
+                source_dict["trip_id"].append(trip_id)
+                source_dict["route_id"].append(route_id)
+                source_dict["start_time"].append(start_time)
+                source_dict["start_date"].append(start_date)
+                source_dict["schedule_relationship"].append(
+                    schedule_relationship
+                )
+                source_dict["direction_id"].append(direction_id)
+                source_dict["vehicle_id"].append(vehicle_id)
+                # Stop Information
+                source_dict["stop_id"].append(stop.stop_id)
+                source_dict["stop_sequence"].append(stop.stop_sequence)
+                source_dict["live_arrival_time"].append(stop.arrival.time)
+                source_dict["arrival_delay"].append(stop.arrival.delay)
+
+        if label == "vehicle":
+            vehicle = entity.vehicle
+            ThisTrip = vehicle.trip
+
+            trip_id = ThisTrip.trip_id
+            vehicle_id = vehicle.vehicle.id
+
+            if not vehicle.trip.trip_id:
+                # Vehicle is not in service
+                continue
+            # Overall entity info
+            source_dict["vehicle_entity_id"].append(entity_id)
+            # trip-specific
+            source_dict["trip_id"].append(trip_id)
+            # vehicle-specific
+            source_dict["vehicle_id"].append(vehicle_id)
+            source_dict["vehicle_latitude"].append(vehicle.position.latitude)
+            source_dict["vehicle_longitude"].append(vehicle.position.longitude)
+
+    df = pd.DataFrame(source_dict)
+    if label == "trip":
+        df["direction_id"] = df["direction_id"].astype("category")
+        df["schedule_relationship"] = df["schedule_relationship"].astype(
+            "category"
         )
 
-        schedule_relationship = ThisTrip.schedule_relationship
-        direction_id = ThisTrip.direction_id
-        vehicle_id = ThisTripData.vehicle.id
-
-        for stop in ThisTripData.stop_time_update:
-            # Overall entity info
-            source_dict["trip_entity_id"].append(entity_id)
-            source_dict["timestamp"].append(timestamp)
-            # Trip-specific Information
-            source_dict["trip_id"].append(trip_id)
-            source_dict["route_id"].append(route_id)
-            source_dict["start_time"].append(start_time)
-            source_dict["start_date"].append(start_date)
-            source_dict["schedule_relationship"].append(schedule_relationship)
-            source_dict["direction_id"].append(direction_id)
-            source_dict["vehicle_id"].append(vehicle_id)
-            # Stop Information
-            source_dict["stop_id"].append(stop.stop_id)
-            source_dict["stop_sequence"].append(stop.stop_sequence)
-            source_dict["live_arrival_time"].append(stop.arrival.time)
-            source_dict["arrival_delay"].append(
-                stop.arrival.delay
-                # pd.to_timedelta(stop.arrival.delay, unit="s")
-            )
-    df = pd.DataFrame(source_dict)
-
     # convert all object types to categories
-    df[df.select_dtypes(["object"]).columns] = df.select_dtypes(
-        ["object"]
-    ).apply(lambda x: x.astype("category"))
-    df["direction_id"] = df["direction_id"].astype("bool")
-    df["schedule_relationship"] = df["schedule_relationship"].astype("bool")
-
-    return df
-
-
-def gtfs_vehicleinfo_to_df(
-    entities: list[gtfs_realtime_pb2.DESCRIPTOR],
-) -> pd.DataFrame:
-    """
-    Convert a list of GTFS feed entities to a Pandas dataframe where the
-    columns correspond to the Vehicle data.
-
-    :param entities: List of GTFS feed objects
-    :type entities: list[gtfs_realtime_pb2.DESCRIPTOR]
-    :return: Pandas dataframe of GTFS vehicle data
-    :rtype: pd.DataFrame
-    """
-    source_dict = defaultdict(list)
-    for entity in entities:
-        entity_id = entity.id
-        vehicle = entity.vehicle
-        ThisTrip = vehicle.trip
-
-        trip_id = ThisTrip.trip_id
-        vehicle_id = vehicle.vehicle.id
-
-        if not vehicle.trip.trip_id:
-            # Vehicle is not in service
-            continue
-        # Overall entity info
-        source_dict["vehicle_entity_id"].append(entity_id)
-        # trip-specific
-        source_dict["trip_id"].append(trip_id)
-        # vehicle-specific
-        source_dict["vehicle_id"].append(vehicle_id)
-        source_dict["vehicle_latitude"].append(vehicle.position.latitude)
-        source_dict["vehicle_longitude"].append(vehicle.position.longitude)
-
-    # convert all object types to categories
-    df = pd.DataFrame(source_dict)
     df[df.select_dtypes(["object"]).columns] = df.select_dtypes(
         ["object"]
     ).apply(lambda x: x.astype("category"))
