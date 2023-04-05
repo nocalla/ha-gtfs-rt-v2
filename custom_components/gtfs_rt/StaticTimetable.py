@@ -95,7 +95,7 @@ def process_dataframes(dataframes: dict[str, pd.DataFrame]) -> pd.DataFrame:
     # merge dataframes -TODO clean this up
 
     _LOGGER.debug("Merging Route and Agency dataframes...")
-    routes = pd.merge(routes, dataframes["agency"], how="left")
+    routes = pd.merge(routes, dataframes["agency"], on="agency_id", how="left")
     _LOGGER.debug("Merging stop and stoptimes dataframes...")
     stops = pd.merge(stop_times, dataframes["stops"], how="left")
     _LOGGER.debug("Converting arrival and departure times to time deltas...")
