@@ -222,7 +222,57 @@ class PublicTransportData:
 
         # merge live and static data
         trip_update_df = pd.merge(
-            trip_update_df, timetable_df, how="left", indicator="source"
+            trip_update_df,
+            timetable_df,
+            how="outer",
+            on="trip_id",
+            indicator="source",
+        )
+
+        # convert categorical columns to strings
+        trip_update_df[
+            [
+                "stop_id_x",
+                "stop_id_y",
+                "route_id_x",
+                "route_id_y",
+                "direction_id_x",
+                "direction_id_y",
+            ]
+        ] = trip_update_df[
+            [
+                "stop_id_x",
+                "stop_id_y",
+                "route_id_x",
+                "route_id_y",
+                "direction_id_x",
+                "direction_id_y",
+            ]
+        ].astype(
+            str
+        )
+        # choose non-NA values for stop_id, route_id, and direction_id
+        # combine stop_id, route_id, and direction_id columns
+        trip_update_df["stop_id"] = trip_update_df["stop_id_x"].combine_first(
+            trip_update_df["stop_id_y"]
+        )
+        trip_update_df["route_id"] = trip_update_df[
+            "route_id_x"
+        ].combine_first(trip_update_df["route_id_y"])
+        trip_update_df["direction_id"] = trip_update_df[
+            "direction_id_x"
+        ].combine_first(trip_update_df["direction_id_y"])
+
+        # drop intermediate columns
+        trip_update_df = trip_update_df.drop(
+            columns=[
+                "stop_id_x",
+                "stop_id_y",
+                "route_id_x",
+                "route_id_y",
+                "direction_id_x",
+                "direction_id_y",
+            ]
         )
         debug_dataframe(trip_update_df, "Merged live and static info")
 
@@ -234,6 +284,23 @@ class PublicTransportData:
 
         # do some maths on the dataframe
         # note all values should be in seconds
+
+        # if no start_date specified, set it to today
+        today = datetime.today()
+        midnight = datetime.combine(today, datetime.min.time())
+        timestamp = int(midnight.timestamp())
+        trip_update_df["start_date_dt"] = trip_update_df[
+            "start_date_dt"
+        ].fillna(midnight)
+        trip_update_df["start_date"] = trip_update_df["start_date"].fillna(
+            timestamp
+        )
+        trip_update_df["arrival_delay"] = trip_update_df[
+            "arrival_delay"
+        ].fillna(0)
+
+        debug_dataframe(trip_update_df, "Fill in missing times")  # debug
+
         # work out stop_time
         # stop_time = arrival_time + start_date + arrival_delay
         # OR live_arrival_time if not zero
