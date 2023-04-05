@@ -69,15 +69,17 @@ def gtfs_data_to_df(
             ThisTrip = ThisTripData.trip
             trip_id = ThisTrip.trip_id
             route_id = ThisTrip.route_id
-            # convert start date and time to Unix time
-            start_date = datetime.strptime(
+            # format start date
+            # TODO - adjust this by 1 day? API bug - always yesterday's date
+            start_date_dt = datetime.strptime(
                 ThisTrip.start_date,
                 "%Y%m%d",
-            ).timestamp()
-            start_time = start_time = (
-                pd.to_timedelta(ThisTrip.start_time)
-                .to_pytimedelta()
-                .total_seconds()
+            )
+            start_time_dt = ThisTrip.start_time
+            # convert start date and time to Unix time
+            start_date = start_date_dt.timestamp()
+            start_time = (
+                pd.to_timedelta(start_time_dt).to_pytimedelta().total_seconds()
             )
 
             schedule_relationship = ThisTrip.schedule_relationship
@@ -91,6 +93,9 @@ def gtfs_data_to_df(
                 # Trip-specific Information
                 source_dict["trip_id"].append(trip_id)
                 source_dict["route_id"].append(route_id)
+                source_dict["start_time_dt"].append(start_time_dt)
+                source_dict["start_date_str"].append(ThisTrip.start_date)
+                source_dict["start_date_dt"].append(start_date_dt)
                 source_dict["start_time"].append(start_time)
                 source_dict["start_date"].append(start_date)
                 source_dict["schedule_relationship"].append(

@@ -99,12 +99,12 @@ def process_dataframes(dataframes: dict[str, pd.DataFrame]) -> pd.DataFrame:
     _LOGGER.debug("Merging stop and stoptimes dataframes...")
     stops = pd.merge(stop_times, dataframes["stops"], how="left")
     _LOGGER.debug("Converting arrival and departure times to time deltas...")
-    stops["scheduled_arrival_time"] = (
-        pd.to_timedelta(stops["arrival_time"]).astype("int64") / 10**9
-    )
-    stops["scheduled_departure_time"] = (
-        pd.to_timedelta(stops["departure_time"]).astype("int64") / 10**9
-    )
+    stops["scheduled_arrival_time"] = pd.to_timedelta(
+        stops["arrival_time"]
+    ).dt.total_seconds()  # .astype("int64") / 10**9
+    stops["scheduled_departure_time"] = pd.to_timedelta(
+        stops["departure_time"]
+    ).dt.total_seconds()  # .astype("int64") / 10**9
 
     _LOGGER.debug("Merging routes and trips dataframes...")
     routes = pd.merge(trips, routes, how="left")
