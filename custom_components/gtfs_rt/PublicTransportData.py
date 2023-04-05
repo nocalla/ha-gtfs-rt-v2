@@ -70,11 +70,12 @@ def gtfs_data_to_df(
             trip_id = ThisTrip.trip_id
             route_id = ThisTrip.route_id
             # format start date
-            # TODO - adjust this by 1 day? API bug - always yesterday's date
+            # increment by 1 day because of API bug where the start date is
+            # always 1 day behind
             start_date_dt = datetime.strptime(
                 ThisTrip.start_date,
                 "%Y%m%d",
-            )
+            ) + timedelta(days=1)
             start_time_dt = ThisTrip.start_time
             # convert start date and time to Unix time
             start_date = start_date_dt.timestamp()
@@ -251,8 +252,6 @@ class PublicTransportData:
         ).dt.tz_convert(tz=tz.tzlocal())
         debug_dataframe(trip_update_df, "Stop Time Calculation")
 
-        # TODO Fix - this isn't working - possibly going 1 hr too strict
-        """
         # remove rows where stop_time is in the past
         log_debug(["Removing times in the past..."], 0)
 
@@ -261,7 +260,7 @@ class PublicTransportData:
             [debug_dataframe(trip_update_df, "Filter out past Stop Times")],
             0,
         )
-        """
+
         # return completed dataframe
         self.info_df = trip_update_df
 
