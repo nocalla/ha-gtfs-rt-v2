@@ -35,10 +35,11 @@ def debug_dataframe(df: pd.DataFrame, name: str = "") -> None:
     :param name: Label to show in log, defaults to "".
     :type name: str, optional
     """
+    max_rows = 8
     try:
         df_info_df = pd.concat(
             objs=[
-                df.sample(n=min(4, df.shape[0])).transpose(),
+                df.sample(n=min(max_rows, df.shape[0])).transpose(),
                 df.dtypes,
                 df.memory_usage(deep=True),
             ],
@@ -48,14 +49,14 @@ def debug_dataframe(df: pd.DataFrame, name: str = "") -> None:
         df_info_df = df.dtypes
 
     df_string = df_info_df.to_string(
-        line_width=79,
+        # line_width=79,
         max_colwidth=20,
         show_dimensions=True,
     )
 
     debug_string = (
         f"\n\nTransposed Dataframe - {name} "
-        f"(Rows: {df.shape[0]}, Columns: {df.shape[1]})"
+        f"(Rows: {df.shape[0]}, Columns: {df.shape[1]})\n"
         f"{df_string}\n"
     )
     log_debug([debug_string], 0)
@@ -76,10 +77,10 @@ def get_time_delta(time: float) -> int:
         diff = int(time - now)  # dt_util.now().replace(tzinfo=None)
         log_debug(
             [
-                "Calculated time difference",
-                int(diff / 60),
-                now,
-                time,
+                (
+                    "Calculated time difference in seconds: "
+                    f"Time - Now = {time} - {now} = {diff/60}"
+                ),
             ],
             1,
         )
