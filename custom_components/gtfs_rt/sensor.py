@@ -97,13 +97,13 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
         sensors.append(
             PublicTransportSensor(
                 data=data,
-                stop=departure.get(CONF_STOP_ID),
-                route=departure.get(CONF_ROUTE),
+                stop_id=departure.get(CONF_STOP_ID),
+                route_id=departure.get(CONF_ROUTE),
                 direction=departure.get(CONF_DIRECTION_ID),
                 icon=departure.get(CONF_ICON),
                 service_type=departure.get(CONF_SERVICE_TYPE),
-                name=departure.get(CONF_NAME),
-                route_name=departure.get(CONF_ROUTE_LOOKUP),
+                sensor_name=departure.get(CONF_NAME),
+                route_no=departure.get(CONF_ROUTE_LOOKUP),
                 stop_code=departure.get(CONF_STOP_CODE),
             )
         )
@@ -117,41 +117,41 @@ class PublicTransportSensor(Entity):
     def __init__(
         self,
         data: PublicTransportData,
-        stop: str,
-        route: str,
+        stop_id: str,
+        route_id: str,
         direction: int,
         icon: str,
         service_type: str,
-        name: str,
-        route_name: str,
+        sensor_name: str,
+        route_no: str,
         stop_code: str,
     ):
         """Initialize the sensor."""
         self.data = data
-        self._name = name
-        self._stop = stop
-        self._route = route
+        self._sensor_name = sensor_name
+        self._stop_id = stop_id
+        self._route_id = route_id
         self._direction = direction
         self._icon = icon
         self._service_type = service_type
-        self.route_name = route_name
-        self.stop_code = stop_code
+        self._route_no = route_no
+        self._stop_code = stop_code
         self.next_services = pd.DataFrame()
         self.update()
 
     @property
     def name(self):
-        return self._name
+        return self._sensor_name
 
     def _get_next_services(
         self,
     ) -> dict:
         filters = {
-            "stop_id": self._stop,
+            "stop_id": self._stop_id,
             "direction_id": self._direction,
-            "route_id": self._route,
-            "route_short_name": self.route_name,
-            "stop_code": self.stop_code,
+            "route_id": self._route_id,
+            "route_short_name": self._route_no,
+            "stop_code": self._stop_code,
         }
 
         return self.data.filter_df(
@@ -169,22 +169,20 @@ class PublicTransportSensor(Entity):
 
     @property
     def extra_state_attributes(self):
-        # """Return the state attributes."""
+        """Return the state attributes."""
+        # TODO - add more attributes
+        # TODO - assign route/stop attributes based on services dict if not
+        #  defined
         ATTR_NEXT_UP = f"Next {self._service_type}"
         attrs = {
             ATTR_DUE_IN: self.state,
-            ATTR_STOP_ID: self._stop,
-            ATTR_ROUTE: self._route,
+            ATTR_STOP_ID: self._stop_id,
+            ATTR_ROUTE: self._route_id,
             ATTR_DIRECTION_ID: self._direction,
         }
-        if len(self.next_services) > 1:
-            second_service = self.next_services[1]
-            attrs[ATTR_NEXT_UP] = second_service["stop_time_dt"].strftime(
-                TIME_STR_FORMAT
-            )
-        else:
-            attrs[ATTR_NEXT_UP] = "-"
 
+        # Get details for the next service
+        # TODO - cache vehicle position data to allow for no position update
         if len(self.next_services) > 0:
             next_service = self.next_services[0]
             attrs[ATTR_DUE_AT] = next_service["stop_time_dt"].strftime(
@@ -196,6 +194,15 @@ class PublicTransportSensor(Entity):
             attrs[ATTR_DUE_AT] = "-"
             attrs[ATTR_LATITUDE] = "-"
             attrs[ATTR_LONGITUDE] = "-"
+
+        # Get details for the service after next
+        if len(self.next_services) > 1:
+            second_service = self.next_services[1]
+            attrs[ATTR_NEXT_UP] = second_service["stop_time_dt"].strftime(
+                TIME_STR_FORMAT
+            )
+        else:
+            attrs[ATTR_NEXT_UP] = "-"
 
         return attrs
 
@@ -217,14 +224,13 @@ class PublicTransportSensor(Entity):
         log_debug(["Updating sensor..."], 0)
         self.data.update()
         self.next_services = self._get_next_services()
-        log_debug(["Dictionary test ", self.next_services], 0) # debug
         # Logging Sensor Update Info
         log_info(["Sensor Update:"], 0)
 
         attributes = [
-            ["Name", self._name],
-            [ATTR_ROUTE, self._route],
-            [ATTR_STOP_ID, self._stop],
+            ["Name", self._sensor_name],
+            [ATTR_ROUTE, self._route_id],
+            [ATTR_STOP_ID, self._stop_id],
             [ATTR_DIRECTION_ID, self._direction],
             [ATTR_ICON, self._icon],
             ["Service Type", self._service_type],
