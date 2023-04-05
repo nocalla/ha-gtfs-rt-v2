@@ -238,18 +238,32 @@ class PublicTransportData:
         # stop_time = arrival_time + start_date + arrival_delay
         # OR live_arrival_time if not zero
         # set value as 0 if no valid time produced
-        trip_update_df["stop_time"] = trip_update_df.apply(
-            lambda row: row["live_arrival_time"]
-            if row["live_arrival_time"] != 0
-            else row["scheduled_arrival_time"]
-            + row["start_date"]
-            + row["arrival_delay"],
-            axis=1,
+
+        # trip_update_df["stop_time"] = trip_update_df.apply(
+        #     lambda row: row["live_arrival_time"]
+        #     if row["live_arrival_time"] != 0
+        #     and pd.notna(row["live_arrival_time"])
+        #     else row["scheduled_arrival_time"]
+        #     + row["start_date"]
+        #     + row["arrival_delay"],
+        #     axis=1,
+        # ).fillna(0)
+
+        trip_update_df["stop_time"] = (
+            trip_update_df["live_arrival_time"]
+            .mask(lambda x: x == 0)  # type: ignore
+            .fillna(
+                trip_update_df["scheduled_arrival_time"]
+                + trip_update_df["start_date"]
+                + trip_update_df["arrival_delay"]
+            )
         ).fillna(0)
+
         # generate datetime object in local timezone
         trip_update_df["stop_time_dt"] = pd.to_datetime(
             trip_update_df["stop_time"], unit="s", utc=True
         ).dt.tz_convert(tz=tz.tzlocal())
+
         debug_dataframe(trip_update_df, "Stop Time Calculation")
 
         # remove rows where stop_time is in the past
