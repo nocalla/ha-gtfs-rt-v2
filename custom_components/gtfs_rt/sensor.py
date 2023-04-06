@@ -80,37 +80,6 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
 )
 
 
-def setup_platform(hass, config, add_devices, discovery_info=None):
-    """Get the public transport sensor."""
-
-    data = PublicTransportData(
-        trip_update_url=config.get(CONF_TRIP_UPDATE_URL),
-        vehicle_position_url=config.get(CONF_VEHICLE_POSITION_URL),
-        route_delimiter=config.get(CONF_ROUTE_DELIMITER),
-        api_key=config.get(CONF_API_KEY),
-        x_api_key=config.get(CONF_X_API_KEY),
-        static_gtfs_url=config.get(CONF_GTFS_URL),
-    )
-
-    sensors = []
-    for departure in config.get(CONF_DEPARTURES):
-        sensors.append(
-            PublicTransportSensor(
-                data=data,
-                stop_id=departure.get(CONF_STOP_ID),
-                route_id=departure.get(CONF_ROUTE),
-                direction=departure.get(CONF_DIRECTION_ID),
-                icon=departure.get(CONF_ICON),
-                service_type=departure.get(CONF_SERVICE_TYPE),
-                sensor_name=departure.get(CONF_NAME),
-                route_no=departure.get(CONF_ROUTE_LOOKUP),
-                stop_code=departure.get(CONF_STOP_CODE),
-            )
-        )
-
-    add_devices(sensors)
-
-
 class PublicTransportSensor(Entity):
     """Implementation of a public transport sensor."""
 
@@ -244,4 +213,35 @@ class PublicTransportSensor(Entity):
             try:
                 log_info([extra_att, extra_attributes[extra_att]], 1)
             except KeyError:
-                log_info([extra_att, "not defined"], 1)
+def setup_platform(
+    hass, config, add_devices, discovery_info=None
+) -> list[PublicTransportSensor]:
+    """Get the public transport sensor."""
+
+    data = PublicTransportData(
+        trip_update_url=config.get(CONF_TRIP_UPDATE_URL),
+        vehicle_position_url=config.get(CONF_VEHICLE_POSITION_URL),
+        route_delimiter=config.get(CONF_ROUTE_DELIMITER),
+        api_key=config.get(CONF_API_KEY),
+        x_api_key=config.get(CONF_X_API_KEY),
+        static_gtfs_url=config.get(CONF_GTFS_URL),
+    )
+
+    sensors = []
+    for departure in config.get(CONF_DEPARTURES):
+        sensors.append(
+            PublicTransportSensor(
+                data=data,
+                stop_id=departure.get(CONF_STOP_ID),
+                route_id=departure.get(CONF_ROUTE),
+                direction=departure.get(CONF_DIRECTION_ID),
+                icon=departure.get(CONF_ICON),
+                service_type=departure.get(CONF_SERVICE_TYPE),
+                sensor_name=departure.get(CONF_NAME),
+                route_no=departure.get(CONF_ROUTE_NO),
+                stop_code=departure.get(CONF_STOP_CODE),
+            )
+        )
+
+    add_devices(sensors)
+    return sensors
