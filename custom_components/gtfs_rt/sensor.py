@@ -225,7 +225,7 @@ class PublicTransportSensor(Entity):
         self.data.update()
         self.next_services = self._get_next_services()
         # Logging Sensor Update Info
-        log_info(["Sensor Update:"], 0)
+        log_info(["\nSensor Update:"], 0)
 
         attributes = [
             ["Name", self._sensor_name],
@@ -235,21 +235,13 @@ class PublicTransportSensor(Entity):
             [ATTR_ICON, self._icon],
             ["Service Type", self._service_type],
             ["unit_of_measurement", self.unit_of_measurement],
-            [ATTR_DUE_IN, self.state],
         ]
         for attribute in attributes:
             log_info(attribute, 1)
 
-        extra_attributes = [
-            ATTR_DUE_AT,
-            ATTR_LATITUDE,
-            ATTR_LONGITUDE,
-            f"Next {self._service_type}",
-        ]
+        extra_attributes = self.extra_state_attributes
         for extra_att in extra_attributes:
             try:
-                log_info(
-                    [extra_att, self.extra_state_attributes[extra_att]], 1
-                )
+                log_info([extra_att, extra_attributes[extra_att]], 1)
             except KeyError:
                 log_info([extra_att, "not defined"], 1)
