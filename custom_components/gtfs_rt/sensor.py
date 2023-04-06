@@ -16,6 +16,18 @@ ATTR_DUE_IN = "Due in"
 ATTR_DUE_AT = "Due at"
 ATTR_NEXT_UP = "Next Service"
 ATTR_ICON = "Icon"
+ATTR_SENSOR_NAME = "Sensor Name"
+ATTR_STOP_CODE = "Stop Code"
+ATTR_STOP_NAME = "Stop Name"
+ATTR_ROUTE_NO = "Route Number"
+ATTR_NEXT_ARRIVAL_TIME = "Next Arrival"
+ATTR_SERVICE_COUNT = "Upcoming Services"
+ATTR_DEP_TIME = "Departure Time"
+ATTR_RT_FLAG = "Live Update"
+ATTR_DELAY = "Delay"
+ATTR_VEHICLE_ID = "Vehicle ID"
+ATTR_SERVICE_TYPE = "Service Type"
+ATTR_UNITS = "units"
 
 CONF_API_KEY = "api_key"
 CONF_X_API_KEY = "x_api_key"
@@ -156,36 +168,75 @@ class PublicTransportSensor(Entity):
         # TODO - add more attributes
         # TODO - assign route/stop attributes based on services dict if not
         #  defined
-        ATTR_NEXT_UP = f"Next {self._service_type}"
-        attrs = {
-            ATTR_DUE_IN: self.state,
-            ATTR_STOP_ID: self._stop_id,
-            ATTR_ROUTE: self._route_id,
-            ATTR_DIRECTION_ID: self._direction,
-        }
 
-        # Get details for the next service
-        # TODO - cache vehicle position data to allow for no position update
-        if len(self.next_services) > 0:
+        # Get details for this service
+        service_count = len(self.next_services)
+        arrival_time = "-"
+        departure_time = "-"
+        arrival_delay = "-"
+        latitude = "-"
+        longitude = "-"
+        rt_flag = "-"
+        vehicle_id = "-"
+        route_id = "-"
+        route_no = "-"
+        stop_id = "-"
+        stop_code = "-"
+        stop_name = "-"
+        direction_id = "-"
+        # get details for next service
+        next_arrival_time = "-"
+
+        # TODO - cache vehicle position data to allow for no position update?
+        if service_count > 0:
             next_service = self.next_services[0]
-            attrs[ATTR_DUE_AT] = next_service["stop_time_dt"].strftime(
+
+            route_id = next_service["route_id"]
+            route_no = next_service["route_short_name"]
+            stop_id = next_service["stop_id"]
+            stop_code = next_service["stop_code"]
+            stop_name = next_service["stop_name"]
+            direction_id = next_service["direction_id"]
+
+            arrival_time = next_service["stop_time_dt"].strftime(
                 TIME_STR_FORMAT
             )
-            attrs[ATTR_LATITUDE] = next_service["vehicle_latitude"]
-            attrs[ATTR_LONGITUDE] = next_service["vehicle_longitude"]
-        else:
-            attrs[ATTR_DUE_AT] = "-"
-            attrs[ATTR_LATITUDE] = "-"
-            attrs[ATTR_LONGITUDE] = "-"
+            latitude = next_service["vehicle_latitude"]
+            longitude = next_service["vehicle_longitude"]
+            # departure_time = ?
+            # rt_flag = ?
+            arrival_delay = int(next_service["arrival_delay"] / 60)
+            vehicle_id = next_service["vehicle_id"]
 
         # Get details for the service after next
-        if len(self.next_services) > 1:
+        if service_count > 1:
             second_service = self.next_services[1]
-            attrs[ATTR_NEXT_UP] = second_service["stop_time_dt"].strftime(
+            next_arrival_time = second_service["stop_time_dt"].strftime(
                 TIME_STR_FORMAT
             )
-        else:
-            attrs[ATTR_NEXT_UP] = "-"
+        ATTR_NEXT_ARRIVAL_TIME = f"Next {self._service_type}"
+        attrs = {
+            ATTR_SENSOR_NAME: self.name,
+            ATTR_DUE_AT: arrival_time,
+            ATTR_DEP_TIME: departure_time,
+            ATTR_DUE_IN: self.state,
+            ATTR_DELAY: arrival_delay,
+            ATTR_UNITS: self.unit_of_measurement,
+            ATTR_ROUTE: route_id,
+            ATTR_ROUTE_NO: route_no,
+            ATTR_STOP_ID: stop_id,
+            ATTR_STOP_CODE: stop_code,
+            ATTR_STOP_NAME: stop_name,
+            ATTR_DIRECTION_ID: direction_id,
+            ATTR_VEHICLE_ID: vehicle_id,
+            ATTR_LATITUDE: latitude,
+            ATTR_LONGITUDE: longitude,
+            ATTR_ICON: self.icon,
+            ATTR_NEXT_ARRIVAL_TIME: next_arrival_time,
+            ATTR_RT_FLAG: rt_flag,
+            ATTR_SERVICE_TYPE: self._service_type,
+            ATTR_SERVICE_COUNT: service_count,
+        }
 
         return attrs
 
@@ -210,23 +261,14 @@ class PublicTransportSensor(Entity):
         # Logging Sensor Update Info
         log_info(["\nSensor Update:"], 0)
 
-        attributes = [
-            ["Name", self._sensor_name],
-            [ATTR_ROUTE, self._route_id],
-            [ATTR_STOP_ID, self._stop_id],
-            [ATTR_DIRECTION_ID, self._direction],
-            [ATTR_ICON, self._icon],
-            ["Service Type", self._service_type],
-            ["unit_of_measurement", self.unit_of_measurement],
-        ]
-        for attribute in attributes:
-            log_info(attribute, 1)
-
-        extra_attributes = self.extra_state_attributes
-        for extra_att in extra_attributes:
+        attributes = self.extra_state_attributes
+        for att in attributes:
             try:
-                log_info([extra_att, extra_attributes[extra_att]], 1)
+                log_info([att, attributes[att]], 1)
             except KeyError:
+                log_info([att, "not defined"], 1)
+
+
 def setup_platform(
     hass, config, add_devices, discovery_info=None
 ) -> list[PublicTransportSensor]:
