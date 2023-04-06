@@ -75,15 +75,15 @@ def get_time_delta(time: float) -> int:
     now = datetime.now(tz=local_timezone).timestamp()
     try:
         diff = int(time - now)  # dt_util.now().replace(tzinfo=None)
-        log_debug(
-            [
-                (
-                    "Calculated time difference in seconds: "
-                    f"Time - Now = {time} - {now} = {diff/60}"
-                ),
-            ],
-            1,
-        )
+        # log_debug(
+        #     [
+        #         (
+        #             "Calculated time difference in seconds: "
+        #             f"Time - Now = {time} - {now} = {diff/60}"
+        #         ),
+        #     ],
+        #     1,
+        # )
         return int(diff / 60)
     except ValueError as e:
         log_error(["Error calculating time difference", e, now, time], 1)
