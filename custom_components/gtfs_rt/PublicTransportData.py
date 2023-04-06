@@ -336,7 +336,7 @@ class PublicTransportData:
         self.info_df = trip_update_df
 
     def filter_df(
-        self, filters: dict, order_by: str, order_ascending: bool
+        self, filters: dict, order_by: str, order_ascending: bool, limit: int
     ) -> dict:
         """
         Filter a dataframe using the provided filters and return a numbered
@@ -351,6 +351,8 @@ class PublicTransportData:
         :type order_by: str
         :param order_ascending: Whether to sort ascending or descending.
         :type order_ascending: bool
+        :param limit: Number of results to limit the filter result to
+        :type limit: int
         :return: Nested dictionary in the following form representing the
         original dataframe after filters have been applied.
         {0:{col1:x, col2:y...}, 1:{col1:x, col2:y...}...}
@@ -375,6 +377,6 @@ class PublicTransportData:
             self.info_df.query(query_str)
             .sort_values(by=[order_by], ascending=order_ascending)
             .reset_index()
-        )
+        ).head(limit)
         debug_dataframe(filtered_df, "Filtered data")
         return filtered_df.to_dict(orient="index")

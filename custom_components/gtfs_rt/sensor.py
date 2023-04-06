@@ -23,15 +23,17 @@ CONF_STOP_ID = "stopid"
 CONF_ROUTE = "route"
 CONF_DIRECTION_ID = "directionid"
 CONF_DEPARTURES = "departures"
+CONF_OPERATOR = "operator"
 CONF_TRIP_UPDATE_URL = "trip_update_url"
 CONF_VEHICLE_POSITION_URL = "vehicle_position_url"
 CONF_ROUTE_DELIMITER = "route_delimiter"
 CONF_ICON = "icon"
 CONF_SERVICE_TYPE = "service_type"
+CONF_LIMIT = "arrivals_limit"
 
 # these parameters are new for static GTFS integration
 CONF_GTFS_URL = "gtfs_url"
-CONF_ROUTE_LOOKUP = "route_name"
+CONF_ROUTE_NO = "route_name"
 CONF_STOP_CODE = "stop_code"
 # end of new parameters
 
@@ -49,6 +51,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_VEHICLE_POSITION_URL): cv.string,
         vol.Optional(CONF_ROUTE_DELIMITER): cv.string,
         vol.Required(CONF_GTFS_URL): cv.string,
+        vol.Optional(CONF_LIMIT, default=30): vol.Coerce(int),  # type: ignore
         vol.Optional(CONF_DEPARTURES): [
             {
                 vol.Required(CONF_NAME): cv.string,
@@ -69,10 +72,13 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
                     CONF_SERVICE_TYPE, default=DEFAULT_SERVICE  # type: ignore
                 ): cv.string,
                 vol.Optional(
-                    CONF_ROUTE_LOOKUP, default=""  # type: ignore
+                    CONF_ROUTE_NO, default=""  # type: ignore
                 ): cv.string,
                 vol.Optional(
                     CONF_STOP_CODE, default=""  # type: ignore
+                ): cv.string,
+                vol.Optional(
+                    CONF_OPERATOR, default=""  # type: ignore
                 ): cv.string,
             }
         ],
@@ -94,6 +100,8 @@ class PublicTransportSensor(Entity):
         sensor_name: str,
         route_no: str,
         stop_code: str,
+        operator: str,
+        arrivals_limit: int,
     ):
         """Initialize the sensor."""
         self.data = data
@@ -105,6 +113,8 @@ class PublicTransportSensor(Entity):
         self._service_type = service_type
         self._route_no = route_no
         self._stop_code = stop_code
+        self._operator = operator
+        self._arrivals_limit = arrivals_limit
         self.next_services = pd.DataFrame()
         self.update()
 
@@ -121,10 +131,14 @@ class PublicTransportSensor(Entity):
             "route_id": self._route_id,
             "route_short_name": self._route_no,
             "stop_code": self._stop_code,
+            "agent_id": self._operator,
         }
 
         return self.data.filter_df(
-            filters, order_by="arrival_time", order_ascending=True
+            filters,
+            order_by="arrival_time",
+            order_ascending=True,
+            limit=self._arrivals_limit,
         )
 
     @property
@@ -240,6 +254,8 @@ def setup_platform(
                 sensor_name=departure.get(CONF_NAME),
                 route_no=departure.get(CONF_ROUTE_NO),
                 stop_code=departure.get(CONF_STOP_CODE),
+                operator=departure.get(CONF_OPERATOR),
+                arrivals_limit=departure.get(CONF_LIMIT),
             )
         )
 

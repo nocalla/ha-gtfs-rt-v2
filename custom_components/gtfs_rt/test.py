@@ -19,9 +19,10 @@ from sensor import (
     CONF_DIRECTION_ID,
     CONF_GTFS_URL,
     CONF_ICON,
+    CONF_OPERATOR,
     CONF_ROUTE,
     CONF_ROUTE_DELIMITER,
-    CONF_ROUTE_LOOKUP,
+    CONF_ROUTE_NO,
     CONF_SERVICE_TYPE,
     CONF_STOP_CODE,
     CONF_STOP_ID,
@@ -58,8 +59,9 @@ PLATFORM_SCHEMA = Schema(
                 Optional(CONF_DIRECTION_ID): bool,
                 Optional(CONF_SERVICE_TYPE): str,
                 Optional(CONF_ICON): str,
-                Optional(CONF_ROUTE_LOOKUP): str,
+                Optional(CONF_ROUTE_NO): str,
                 Optional(CONF_STOP_CODE): str,
+                Optional(CONF_OPERATOR): str,
             }
         ],
     }
