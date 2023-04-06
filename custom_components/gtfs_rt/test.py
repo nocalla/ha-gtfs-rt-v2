@@ -9,6 +9,7 @@ See test_translink.yaml for example
 import argparse
 import logging
 import sys
+import time
 
 import yaml
 from schema import Optional, Schema, SchemaError
@@ -29,9 +30,6 @@ from sensor import (
     CONF_X_API_KEY,
     setup_platform,
 )
-
-# import time
-
 
 sys.path.append("lib")
 _LOGGER = logging.getLogger(__name__)
@@ -105,10 +103,18 @@ if __name__ == "__main__":
         configuration = yaml.safe_load(test_yaml)
     try:
         PLATFORM_SCHEMA.validate(configuration)
-        logging.info("Input file configuration is valid.")
-        setup_platform("", configuration, add_devices, None)
-        # time.sleep(60)  # test out repeating
-        # setup_platform("", configuration, add_devices, None)
+        _LOGGER.info("Input file configuration is valid.")
+        sensors = setup_platform("", configuration, add_devices, None)
 
+        while True:
+            _LOGGER.debug(
+                "\nWaiting before looping (Cancel loop with CTRL+C)..."
+            )
+            time.sleep(60)  # test out repeated polling
+            _LOGGER.info(f"\nUpdating sensors @ {time.time()}...")
+            for sensor in sensors:
+                sensor.update()
+    except KeyboardInterrupt:
+        logging.info("Loop terminated manually.")
     except SchemaError as se:
         logging.info("Input file configuration invalid: {}".format(se))
