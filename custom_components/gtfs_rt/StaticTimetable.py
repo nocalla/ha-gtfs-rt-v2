@@ -92,6 +92,18 @@ def process_dataframes(dataframes: dict[str, pd.DataFrame]) -> pd.DataFrame:
     trips = dataframes["trips"]
     stop_times = dataframes["stop_times"]
     calendar = dataframes["calendar"]
+    # reshape calendar_dates dataframe
+    calendar_dates = (
+        dataframes["calendar_dates"]
+        .pivot_table(
+            index="service_id",
+            columns="date",
+            values="exception_type",
+            aggfunc="first",
+        )
+        .iloc[:, 1:-1]
+        .add_prefix("exception_")
+    )
 
     # merge dataframes
 
@@ -106,9 +118,9 @@ def process_dataframes(dataframes: dict[str, pd.DataFrame]) -> pd.DataFrame:
     stops["scheduled_departure_time"] = pd.to_timedelta(
         stops["departure_time"]
     ).dt.total_seconds()
-
+    _LOGGER.debug("Merging calendar and calendar_dates dataframes...")
+    calendar = pd.merge(calendar, calendar_dates, on="service_id", how="left")
     _LOGGER.debug("Merging trips and calendar dataframes...")
-
     calendar.columns = [
         f"{col}_cal" if col != "service_id" else col
         for col in calendar.columns

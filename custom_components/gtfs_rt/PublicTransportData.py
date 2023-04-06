@@ -306,16 +306,6 @@ class PublicTransportData:
         # OR live_arrival_time if not zero
         # set value as 0 if no valid time produced
 
-        # trip_update_df["stop_time"] = trip_update_df.apply(
-        #     lambda row: row["live_arrival_time"]
-        #     if row["live_arrival_time"] != 0
-        #     and pd.notna(row["live_arrival_time"])
-        #     else row["scheduled_arrival_time"]
-        #     + row["start_date"]
-        #     + row["arrival_delay"],
-        #     axis=1,
-        # ).fillna(0)
-
         trip_update_df["stop_time"] = (
             trip_update_df["live_arrival_time"]
             .mask(lambda x: x == 0)  # type: ignore
