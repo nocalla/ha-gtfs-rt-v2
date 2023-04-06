@@ -10,7 +10,7 @@ from PublicTransportData import PublicTransportData
 from utils import get_time_delta, log_debug, log_info
 
 ATTR_STOP_ID = "Stop ID"
-ATTR_ROUTE = "Route"
+ATTR_ROUTE_ID = "Route ID"
 ATTR_DIRECTION_ID = "Direction ID"
 ATTR_DUE_IN = "Due in"
 ATTR_DUE_AT = "Due at"
@@ -222,7 +222,7 @@ class PublicTransportSensor(Entity):
             ATTR_DUE_IN: self.state,
             ATTR_DELAY: arrival_delay,
             ATTR_UNITS: self.unit_of_measurement,
-            ATTR_ROUTE: route_id,
+            ATTR_ROUTE_ID: route_id,
             ATTR_ROUTE_NO: route_no,
             ATTR_STOP_ID: stop_id,
             ATTR_STOP_CODE: stop_code,
@@ -297,7 +297,7 @@ def setup_platform(
                 route_no=departure.get(CONF_ROUTE_NO),
                 stop_code=departure.get(CONF_STOP_CODE),
                 operator=departure.get(CONF_OPERATOR),
-                arrivals_limit=departure.get(CONF_LIMIT),
+                arrivals_limit=config.get(CONF_LIMIT),
             )
         )
 
