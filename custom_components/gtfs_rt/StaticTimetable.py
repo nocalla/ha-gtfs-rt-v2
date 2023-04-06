@@ -91,25 +91,38 @@ def process_dataframes(dataframes: dict[str, pd.DataFrame]) -> pd.DataFrame:
     routes = dataframes["routes"]
     trips = dataframes["trips"]
     stop_times = dataframes["stop_times"]
+    calendar = dataframes["calendar"]
 
-    # merge dataframes -TODO clean this up
+    # merge dataframes
 
     _LOGGER.debug("Merging Route and Agency dataframes...")
     routes = pd.merge(routes, dataframes["agency"], on="agency_id", how="left")
     _LOGGER.debug("Merging stop and stoptimes dataframes...")
-    stops = pd.merge(stop_times, dataframes["stops"], how="left")
+    stops = pd.merge(stop_times, dataframes["stops"], on="stop_id", how="left")
     _LOGGER.debug("Converting arrival and departure times to time deltas...")
     stops["scheduled_arrival_time"] = pd.to_timedelta(
         stops["arrival_time"]
-    ).dt.total_seconds()  # .astype("int64") / 10**9
+    ).dt.total_seconds()
     stops["scheduled_departure_time"] = pd.to_timedelta(
         stops["departure_time"]
-    ).dt.total_seconds()  # .astype("int64") / 10**9
+    ).dt.total_seconds()
 
+    _LOGGER.debug("Merging trips and calendar dataframes...")
+
+    calendar.columns = [
+        f"{col}_cal" if col != "service_id" else col
+        for col in calendar.columns
+    ]
+    trips = pd.merge(
+        trips,
+        calendar,
+        on="service_id",
+        how="left",
+    )
     _LOGGER.debug("Merging routes and trips dataframes...")
-    routes = pd.merge(trips, routes, how="left")
+    routes = pd.merge(trips, routes, on="route_id", how="left")
     _LOGGER.debug("Merging routes and stops dataframes...")
-    stops = pd.merge(stops, routes, how="left")
+    stops = pd.merge(stops, routes, on="trip_id", how="left")
     _LOGGER.debug("Deleting empty columns...")
     stops = stops.dropna(how="all", axis=1)
 
@@ -129,37 +142,37 @@ def get_dataframes(url: str) -> dict[str, pd.DataFrame]:
     """
     # Make a GET request to the URL
     _LOGGER.info("Requesting GTFS static data...")
-    response = requests.get(url, timeout=10)
+    response = requests.get(url, timeout=10, stream=True)
+    response.raise_for_status()
     _LOGGER.info(f"Request zip file successful {response.status_code}")
-
-    # Load the zip file into a ZipFile object
-    zip_file = zipfile.ZipFile(io.BytesIO(response.content))
 
     # Define an empty dictionary to store the Pandas DataFrames
     dataframes = dict()
     _LOGGER.info("Creating dataframes from source data...")
-    # Loop through each file in the zip file
+
     target_files = [
         "routes.txt",
         "trips.txt",
         "stops.txt",
         "stop_times.txt",
         "agency.txt",
+        "calendar.txt",
+        "calendar_dates.txt",
     ]
     datatypes = defaultdict(
         lambda: "category",
         {
-            "direction_id": bool,
             "stop_sequence": "Int64",
             "stop_lat": float,
             "stop_lon": float,
-            "service_id": "Int64",
         },
     )
 
-    for filename in zip_file.namelist():
-        # Extract the file from the zip file
-        if filename in target_files:
+    # Load the zip file into a ZipFile object
+    with zipfile.ZipFile(io.BytesIO(response.content)) as zip_file:
+        # Loop through each targeted file in the zip file
+        for filename in [f for f in zip_file.namelist() if f in target_files]:
+            # Extract the file from the zip file
             _LOGGER.debug(f"Creating dataframe from {filename}...")
             with zip_file.open(filename, "r") as file:
                 # Create a Pandas DataFrame from the file
