@@ -7,7 +7,7 @@ from homeassistant.components.sensor import PLATFORM_SCHEMA
 from homeassistant.const import ATTR_LATITUDE, ATTR_LONGITUDE, CONF_NAME
 from homeassistant.helpers.entity import Entity
 from PublicTransportData import PublicTransportData
-from utils import get_time_delta, log_debug, log_info
+from utils import get_time_delta, log_debug, log_info, unix_to_str_timestamp
 
 ATTR_STOP_ID = "Stop ID"
 ATTR_ROUTE_ID = "Route ID"

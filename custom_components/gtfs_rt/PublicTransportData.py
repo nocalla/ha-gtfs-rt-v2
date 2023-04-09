@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 import requests
-from dateutil import tz
 from google.transit import gtfs_realtime_pb2
 from homeassistant.util import Throttle
 from StaticTimetable import GTFSCache, StaticMasterGTFSInfo
@@ -300,10 +299,7 @@ class PublicTransportData:
             )
         ).fillna(0)
 
-        # generate datetime object in local timezone
-        trip_update_df["stop_time_dt"] = pd.to_datetime(
-            trip_update_df["stop_time"], unit="s", utc=True
-        ).dt.tz_convert(tz=tz.tzlocal())
+
 
         debug_dataframe(trip_update_df, "Stop Time Calculation")
 
