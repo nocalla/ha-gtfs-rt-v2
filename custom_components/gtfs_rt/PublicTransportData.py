@@ -91,6 +91,7 @@ def gtfs_data_to_df(
                 # Overall entity info
                 source_dict["trip_entity_id"].append(entity_id)
                 source_dict["timestamp"].append(timestamp)
+                source_dict["real_time_update"].append(True)
                 # Trip-specific Information
                 source_dict["trip_id"].append(trip_id)
                 source_dict["route_id"].append(route_id)
@@ -109,6 +110,8 @@ def gtfs_data_to_df(
                 source_dict["stop_sequence"].append(stop.stop_sequence)
                 source_dict["live_arrival_time"].append(stop.arrival.time)
                 source_dict["arrival_delay"].append(stop.arrival.delay)
+                source_dict["live_departure_time"].append(stop.departure.time)
+                source_dict["departure_delay"].append(stop.departure.delay)
 
         if label == "vehicle":
             vehicle = entity.vehicle
@@ -183,6 +186,11 @@ class PublicTransportData:
             ],
             0,
         )
+        # get static timetable data
+        timetable_df = StaticMasterGTFSInfo(
+            url=self.static_gtfs_url, CachedData=self.CachedGTFSData
+        ).departure_info
+        debug_dataframe(timetable_df, "Static Timetable Info")
 
         # create trip update dataframe
         # Use list comprehension to filter entities with trip_update field
@@ -208,17 +216,10 @@ class PublicTransportData:
         vehicle_info_df = gtfs_data_to_df(v_feed_entities, label="vehicle")
         debug_dataframe(vehicle_info_df, "Vehicle Info")
 
-        # add vehicle to trip update info TODO: fix merging- some missing?
         trip_update_df = pd.merge(
             left=trip_update_df, right=vehicle_info_df, how="left"
         )
         debug_dataframe(trip_update_df, "Merged Trip & Vehicle Info")
-
-        # get static timetable data
-        timetable_df = StaticMasterGTFSInfo(
-            url=self.static_gtfs_url, CachedData=self.CachedGTFSData
-        ).departure_info
-        debug_dataframe(timetable_df, "Static Timetable Info")
 
         # merge live and static data
         trip_update_df = pd.merge(
@@ -229,30 +230,22 @@ class PublicTransportData:
             indicator="source",
         )
 
+        # duplicated columns fixing
+        duplicated_columns = [
+            "stop_id_x",
+            "stop_id_y",
+            "route_id_x",
+            "route_id_y",
+            "direction_id_x",
+            "direction_id_y",
+            "stop_sequence_x",
+            "stop_sequence_y",
+        ]
         # convert categorical columns to strings
-        trip_update_df[
-            [
-                "stop_id_x",
-                "stop_id_y",
-                "route_id_x",
-                "route_id_y",
-                "direction_id_x",
-                "direction_id_y",
-            ]
-        ] = trip_update_df[
-            [
-                "stop_id_x",
-                "stop_id_y",
-                "route_id_x",
-                "route_id_y",
-                "direction_id_x",
-                "direction_id_y",
-            ]
-        ].astype(
-            str
-        )
-        # choose non-NA values for stop_id, route_id, and direction_id
-        # combine stop_id, route_id, and direction_id columns
+        trip_update_df[duplicated_columns] = trip_update_df[
+            duplicated_columns
+        ].astype(str)
+        # choose non-NA values for duplicated columns and combine
         trip_update_df["stop_id"] = trip_update_df["stop_id_x"].combine_first(
             trip_update_df["stop_id_y"]
         )
@@ -264,16 +257,7 @@ class PublicTransportData:
         ].combine_first(trip_update_df["direction_id_y"])
 
         # drop intermediate columns
-        trip_update_df = trip_update_df.drop(
-            columns=[
-                "stop_id_x",
-                "stop_id_y",
-                "route_id_x",
-                "route_id_y",
-                "direction_id_x",
-                "direction_id_y",
-            ]
-        )
+        trip_update_df = trip_update_df.drop(columns=duplicated_columns)
         debug_dataframe(trip_update_df, "Merged live and static info")
 
         # need to split route_ids if there's a delimiter
