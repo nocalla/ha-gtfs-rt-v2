@@ -131,7 +131,7 @@ class PublicTransportSensor(Entity):
             "route_id": self._route_id,
             "route_short_name": self._route_no,
             "stop_code": self._stop_code,
-            "agent_id": self._operator,
+            "agency_id": self._operator,
         }
 
         return self.data.filter_df(
