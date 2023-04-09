@@ -320,7 +320,11 @@ class PublicTransportData:
         self.info_df = trip_update_df
 
     def filter_df(
-        self, filters: dict, order_by: str, order_ascending: bool, limit: int
+        self,
+        filters: dict,
+        order_by: str,
+        order_ascending: bool,
+        limit: int = 30,
     ) -> dict:
         """
         Filter a dataframe using the provided filters and return a numbered
@@ -344,6 +348,7 @@ class PublicTransportData:
         the "order_by" parameter.
         :rtype: dict
         """
+        log_debug([f"Filters: {filters}"], 0)
         query_str = " and ".join(
             [
                 f"{key}.astype('{type(value).__name__}') == {value!r}"
@@ -352,7 +357,7 @@ class PublicTransportData:
                 if isinstance(value, str)
                 else f"{key} == {value}"
                 for key, value in filters.items()
-                if value is not None
+                if value is not None or ""
             ]
         )
         log_debug([f"Filtering data using filter query ({query_str})..."], 0)
@@ -361,6 +366,7 @@ class PublicTransportData:
             self.info_df.query(query_str)
             .sort_values(by=[order_by], ascending=order_ascending)
             .reset_index()
-        ).head(limit)
+            .head(limit)
+        )
         debug_dataframe(filtered_df, "Filtered data")
         return filtered_df.to_dict(orient="index")
