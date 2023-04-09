@@ -51,7 +51,6 @@ CONF_STOP_CODE = "stop_code"
 
 DEFAULT_SERVICE = "Service"
 DEFAULT_ICON = "mdi:bus"
-DEFAULT_DIRECTION = 1
 
 TIME_STR_FORMAT = "%H:%M"
 
@@ -67,15 +66,10 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_DEPARTURES): [
             {
                 vol.Required(CONF_NAME): cv.string,
-                vol.Optional(
-                    CONF_STOP_ID, default=""  # type: ignore
-                ): cv.string,
-                vol.Optional(
-                    CONF_ROUTE, default=""  # type: ignore
-                ): cv.string,
+                vol.Optional(CONF_STOP_ID): cv.string,
+                vol.Optional(CONF_ROUTE): cv.string,
                 vol.Optional(
                     CONF_DIRECTION_ID,
-                    default=DEFAULT_DIRECTION,  # type: ignore
                 ): int,
                 vol.Optional(
                     CONF_ICON, default=DEFAULT_ICON  # type: ignore
@@ -83,15 +77,9 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
                 vol.Optional(
                     CONF_SERVICE_TYPE, default=DEFAULT_SERVICE  # type: ignore
                 ): cv.string,
-                vol.Optional(
-                    CONF_ROUTE_NO, default=""  # type: ignore
-                ): cv.string,
-                vol.Optional(
-                    CONF_STOP_CODE, default=""  # type: ignore
-                ): cv.string,
-                vol.Optional(
-                    CONF_OPERATOR, default=""  # type: ignore
-                ): cv.string,
+                vol.Optional(CONF_ROUTE_NO): cv.string,
+                vol.Optional(CONF_STOP_CODE): cv.string,
+                vol.Optional(CONF_OPERATOR): cv.string,
             }
         ],
     }
