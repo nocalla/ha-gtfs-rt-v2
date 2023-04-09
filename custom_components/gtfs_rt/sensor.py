@@ -145,7 +145,7 @@ class PublicTransportSensor(Entity):
     def state(self):
         """Return the state of the sensor."""
         return (
-            get_time_delta(self.next_services[0]["stop_time"])
+            get_time_delta(self.next_services[0]["updated_arrival_time"])
             if len(self.next_services) > 0
             else "-"
         )
@@ -153,75 +153,48 @@ class PublicTransportSensor(Entity):
     @property
     def extra_state_attributes(self):
         """Return the state attributes."""
-        # TODO - add more attributes
-        # TODO - assign route/stop attributes based on services dict if not
-        #  defined
-
-        # Get details for this service
-        service_count = len(self.next_services)
-        arrival_time = "-"
-        departure_time = "-"
-        arrival_delay = "-"
-        latitude = "-"
-        longitude = "-"
-        rt_flag = "-"
-        vehicle_id = "-"
-        route_id = "-"
-        route_no = "-"
-        stop_id = "-"
-        stop_code = "-"
-        stop_name = "-"
-        direction_id = "-"
-        # get details for next service
-        next_arrival_time = "-"
 
         # TODO - cache vehicle position data to allow for no position update?
-        if service_count > 0:
-            next_service = self.next_services[0]
 
-            route_id = next_service["route_id"]
-            route_no = next_service["route_short_name"]
-            stop_id = next_service["stop_id"]
-            stop_code = next_service["stop_code"]
-            stop_name = next_service["stop_name"]
-            direction_id = next_service["direction_id"]
+        service_count = len(self.next_services)
 
-            arrival_time = next_service["stop_time_dt"].strftime(
-                TIME_STR_FORMAT
-            )
-            latitude = next_service["vehicle_latitude"]
-            longitude = next_service["vehicle_longitude"]
-            # departure_time = ?
-            # rt_flag = ?
-            arrival_delay = int(next_service["arrival_delay"] / 60)
-            vehicle_id = next_service["vehicle_id"]
-
-        # Get details for the service after next
-        if service_count > 1:
-            second_service = self.next_services[1]
-            next_arrival_time = second_service["stop_time_dt"].strftime(
-                TIME_STR_FORMAT
-            )
+        if service_count == 0:
+            return {
+                ATTR_SERVICE_COUNT: service_count,
+            }
+        this_service = self.next_services[0] if service_count > 0 else {}
+        next_service = self.next_services[1] if service_count > 1 else {}
         ATTR_NEXT_ARRIVAL_TIME = f"Next {self._service_type}"
+
+        delay_secs = int(
+            this_service.get("arrival_delay", 0.0)  # type: ignore
+        )
+        delay_mins = delay_secs // 60
         attrs = {
             ATTR_SENSOR_NAME: self.name,
-            ATTR_DUE_AT: arrival_time,
-            ATTR_DEP_TIME: departure_time,
+            ATTR_DUE_AT: unix_to_str_timestamp(
+                this_service.get("updated_arrival_time"), TIME_STR_FORMAT
+            ),
+            ATTR_DEP_TIME: unix_to_str_timestamp(
+                this_service.get("updated_departure_time"), TIME_STR_FORMAT
+            ),
             ATTR_DUE_IN: self.state,
-            ATTR_DELAY: arrival_delay,
+            ATTR_DELAY: delay_mins,
             ATTR_UNITS: self.unit_of_measurement,
-            ATTR_ROUTE_ID: route_id,
-            ATTR_ROUTE_NO: route_no,
-            ATTR_STOP_ID: stop_id,
-            ATTR_STOP_CODE: stop_code,
-            ATTR_STOP_NAME: stop_name,
-            ATTR_DIRECTION_ID: direction_id,
-            ATTR_VEHICLE_ID: vehicle_id,
-            ATTR_LATITUDE: latitude,
-            ATTR_LONGITUDE: longitude,
+            ATTR_ROUTE_ID: this_service.get("route_id", "-"),
+            ATTR_ROUTE_NO: this_service.get("route_short_name", "-"),
+            ATTR_STOP_ID: this_service.get("stop_id", "-"),
+            ATTR_STOP_CODE: this_service.get("stop_code", "-"),
+            ATTR_STOP_NAME: this_service.get("stop_name", "-"),
+            ATTR_DIRECTION_ID: this_service.get("direction_id", "-"),
+            ATTR_VEHICLE_ID: this_service.get("vehicle_id", "-"),
+            ATTR_LATITUDE: this_service.get("vehicle_latitude", "-"),
+            ATTR_LONGITUDE: this_service.get("vehicle_longitude", "-"),
             ATTR_ICON: self.icon,
-            ATTR_NEXT_ARRIVAL_TIME: next_arrival_time,
-            ATTR_RT_FLAG: rt_flag,
+            ATTR_NEXT_ARRIVAL_TIME: unix_to_str_timestamp(
+                next_service.get("updated_arrival_time_dt"), TIME_STR_FORMAT
+            ),
+            ATTR_RT_FLAG: this_service.get("real_time_update", "False"),
             ATTR_SERVICE_TYPE: self._service_type,
             ATTR_SERVICE_COUNT: service_count,
         }

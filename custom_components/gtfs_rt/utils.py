@@ -36,6 +36,8 @@ def debug_dataframe(df: pd.DataFrame, name: str = "") -> None:
     :type name: str, optional
     """
     max_rows = 8
+    # sort columns alphabetically
+    df = df[sorted(df.columns)]
     try:
         df_info_df = pd.concat(
             objs=[
@@ -74,17 +76,18 @@ def get_time_delta(time: float) -> int:
     local_timezone = tz.tzlocal()
     now = datetime.now(tz=local_timezone).timestamp()
     try:
-        diff = int(time - now)  # dt_util.now().replace(tzinfo=None)
-        # log_debug(
-        #     [
-        #         (
-        #             "Calculated time difference in seconds: "
-        #             f"Time - Now = {time} - {now} = {diff/60}"
-        #         ),
-        #     ],
-        #     1,
-        # )
+        diff = int(time - now)
         return int(diff / 60)
     except ValueError as e:
         log_error(["Error calculating time difference", e, now, time], 1)
         return -1
+
+
+def unix_to_str_timestamp(time, time_format: str) -> str:
+    if isinstance(time, float):
+        time = pd.to_datetime(time, unit="s", utc=True).tz_convert(
+            tz=tz.tzlocal()
+        )
+        return time.strftime(time_format)
+    else:
+        return "-"
