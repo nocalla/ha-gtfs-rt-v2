@@ -76,7 +76,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
                 vol.Optional(
                     CONF_DIRECTION_ID,
                     default=DEFAULT_DIRECTION,  # type: ignore
-                ): bool,
+                ): int,
                 vol.Optional(
                     CONF_ICON, default=DEFAULT_ICON  # type: ignore
                 ): cv.string,

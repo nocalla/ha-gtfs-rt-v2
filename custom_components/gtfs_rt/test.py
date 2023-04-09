@@ -12,60 +12,16 @@ import sys
 import time
 
 import yaml
-from schema import Optional, Schema, SchemaError
-from sensor import (
-    CONF_API_KEY,
-    CONF_DEPARTURES,
-    CONF_DIRECTION_ID,
-    CONF_GTFS_URL,
-    CONF_ICON,
-    CONF_OPERATOR,
-    CONF_ROUTE,
-    CONF_ROUTE_DELIMITER,
-    CONF_ROUTE_NO,
-    CONF_SERVICE_TYPE,
-    CONF_STOP_CODE,
-    CONF_STOP_ID,
-    CONF_TRIP_UPDATE_URL,
-    CONF_VEHICLE_POSITION_URL,
-    CONF_X_API_KEY,
-    setup_platform,
-)
+from sensor import PLATFORM_SCHEMA, setup_platform
+from utils import _LOGGER
+from voluptuous import Invalid
 
 sys.path.append("lib")
-_LOGGER = logging.getLogger(__name__)
-
-CONF_NAME = "name"
 
 
 def add_devices(sensors: list):
     """Placeholder function to mock up Homeassistant function"""
     return
-
-
-PLATFORM_SCHEMA = Schema(
-    {
-        CONF_TRIP_UPDATE_URL: str,
-        Optional(CONF_API_KEY): str,
-        Optional(CONF_X_API_KEY): str,
-        Optional(CONF_VEHICLE_POSITION_URL): str,
-        Optional(CONF_ROUTE_DELIMITER): str,
-        CONF_GTFS_URL: str,
-        CONF_DEPARTURES: [
-            {
-                CONF_NAME: str,
-                Optional(CONF_STOP_ID): str,
-                Optional(CONF_ROUTE): str,
-                Optional(CONF_DIRECTION_ID): bool,
-                Optional(CONF_SERVICE_TYPE): str,
-                Optional(CONF_ICON): str,
-                Optional(CONF_ROUTE_NO): str,
-                Optional(CONF_STOP_CODE): str,
-                Optional(CONF_OPERATOR): str,
-            }
-        ],
-    }
-)
 
 
 if __name__ == "__main__":
@@ -102,21 +58,31 @@ if __name__ == "__main__":
         )
 
     with open(args["file"], "r") as test_yaml:
-        configuration = yaml.safe_load(test_yaml)
-    try:
-        PLATFORM_SCHEMA.validate(configuration)
-        _LOGGER.info("Input file configuration is valid.")
-        sensors = setup_platform("", configuration, add_devices, None)
+        input_config = yaml.safe_load(test_yaml)
+        input_config["platform"] = "platform"
 
+    try:
+        configuration = PLATFORM_SCHEMA(input_config)
+        _LOGGER.info("Input file configuration is valid.")
+        _LOGGER.info(configuration)
+        start_time = time.time()
+        sensors = setup_platform("", configuration, add_devices, None)
+        elapsed_time = time.time() - start_time
+        _LOGGER.info(f"\nElapsed time: {elapsed_time:.2f} seconds")
+        print("Looping underway- cancel loop with CTRL+C\n")
         while True:
-            _LOGGER.debug(
+            _LOGGER.info(
                 "\nWaiting before looping (Cancel loop with CTRL+C)..."
             )
             time.sleep(60)  # test out repeated polling
-            _LOGGER.info(f"\nUpdating sensors @ {time.time()}...")
+            start_time = time.time()
+            _LOGGER.info(f"\nUpdating sensors @ {start_time}...")
             for sensor in sensors:
                 sensor.update()
+            elapsed_time = time.time() - start_time
+            _LOGGER.info(f"\nElapsed time: {elapsed_time:.2f} seconds")
     except KeyboardInterrupt:
         logging.info("Loop terminated manually.")
-    except SchemaError as se:
-        logging.info("Input file configuration invalid: {}".format(se))
+    except Invalid as se:
+        _LOGGER.error(input_config)
+        logging.error(f"Input file configuration invalid: {se}")
