@@ -265,31 +265,35 @@ class PublicTransportData:
                 "route_id"
             ].str.split(self._route_delimiter, expand=True)
 
-        # do some maths on the dataframe
-        # note all values should be in seconds
-
         # if no start_date specified, set it to today
-        today = datetime.today()
-        midnight = datetime.combine(today, datetime.min.time())
-        timestamp = int(midnight.timestamp())
+        # if arrival time is in the past, set start_date to tomorrow
+        now = datetime.today()
+        now_secs = now.timestamp()
+        midnight = datetime.combine(now, datetime.min.time())
+        secs_since_midnight = (now - midnight).total_seconds()
+        midnight_tomorrow = midnight + timedelta(days=1)
+
+        # set start_date to today for all rows missing start dates
+        trip_update_df["start_date"] = trip_update_df["start_date"].fillna(
+            midnight.timestamp()
+        )
         trip_update_df["start_date_dt"] = trip_update_df[
             "start_date_dt"
         ].fillna(midnight)
-        trip_update_df["start_date"] = trip_update_df["start_date"].fillna(
-            timestamp
-        )
+        debug_dataframe(trip_update_df, "Fill in missing times")  # debug
+
+        # do some maths on the dataframe
+        # if no arrival_delay specified, set to 0
         trip_update_df["arrival_delay"] = trip_update_df[
             "arrival_delay"
         ].fillna(0)
 
-        debug_dataframe(trip_update_df, "Fill in missing times")  # debug
-
-        # work out stop_time
-        # stop_time = arrival_time + start_date + arrival_delay
+        # work out updated_arrival_time
+        # updated_arrival_time = arrival_time + start_date + arrival_delay
         # OR live_arrival_time if not zero
         # set value as 0 if no valid time produced
 
-        trip_update_df["stop_time"] = (
+        trip_update_df["updated_arrival_time"] = (
             trip_update_df["live_arrival_time"]
             .mask(lambda x: x == 0)  # type: ignore
             .fillna(
@@ -300,17 +304,55 @@ class PublicTransportData:
         ).fillna(0)
 
 
+        # work out updated_departure_time
+        trip_update_df["updated_departure_time"] = (
+            trip_update_df["live_departure_time"]
+            .mask(lambda x: x == 0)  # type: ignore
+            .fillna(
+                trip_update_df["scheduled_departure_time"]
+                + trip_update_df["start_date"]
+                + trip_update_df["arrival_delay"]
+            )
+        ).fillna(0)
+
+        # if updated_arrival_time is in the past, add the service to tomorrow
+        # using the scheduled time (drop the delay)
+        tomorrow_mask = (
+            trip_update_df["updated_arrival_time"] < secs_since_midnight
+        )
+        tomorrow_services = trip_update_df.loc[tomorrow_mask].copy()
+        tomorrow_services["start_date"] = midnight_tomorrow.timestamp()
+        tomorrow_services["start_date_dt"] = midnight_tomorrow
+        tomorrow_services["updated_arrival_time"] = (
+            midnight_tomorrow.timestamp()
+            + tomorrow_services["scheduled_arrival_time"]
+        )
+        # update original dataframe with tomorrow's services
+        trip_update_df.update(tomorrow_services)
 
         debug_dataframe(trip_update_df, "Stop Time Calculation")
 
-        # remove rows where stop_time is in the past
+        # remove rows where updated_arrival_time is in the past
         log_debug(["Removing times in the past..."], 0)
 
-        trip_update_df = trip_update_df.query("stop_time - timestamp >=0")
-        log_debug(
-            [debug_dataframe(trip_update_df, "Filter out past Stop Times")],
-            0,
+        trip_update_df = trip_update_df.query(
+            "updated_arrival_time - @now_secs >=0"
         )
+        debug_dataframe(trip_update_df, "Filter out past Stop Times")
+
+        # filter out days when the service doesn't run & exceptions
+        # TODO!
+
+        # fill in empty real_time_update values
+        trip_update_df.loc[
+            trip_update_df["real_time_update"].isnull(), "real_time_update"
+        ] = False
+        trip_update_df.loc[
+            trip_update_df["vehicle_latitude"].isnull(), "vehicle_latitude"
+        ] = "-"
+        trip_update_df.loc[
+            trip_update_df["vehicle_longitude"].isnull(), "vehicle_longitude"
+        ] = "-"
 
         # return completed dataframe
         self.info_df = trip_update_df
