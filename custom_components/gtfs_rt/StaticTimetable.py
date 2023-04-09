@@ -1,13 +1,11 @@
 import datetime
 import io
-import logging
 import zipfile
 from collections import defaultdict
 
 import pandas as pd
 import requests
-
-_LOGGER = logging.getLogger(__name__)
+from utils import _LOGGER
 
 
 class GTFSCache:
@@ -102,7 +100,7 @@ def process_dataframes(dataframes: dict[str, pd.DataFrame]) -> pd.DataFrame:
             aggfunc="first",
         )
         .iloc[:, 1:-1]
-        .add_prefix("exception_")
+        .add_prefix("exc_")
     )
 
     # merge dataframes
@@ -122,7 +120,7 @@ def process_dataframes(dataframes: dict[str, pd.DataFrame]) -> pd.DataFrame:
     calendar = pd.merge(calendar, calendar_dates, on="service_id", how="left")
     _LOGGER.debug("Merging trips and calendar dataframes...")
     calendar.columns = [
-        f"{col}_cal" if col != "service_id" else col
+        f"cal_{col}" if col != "service_id" else col
         for col in calendar.columns
     ]
     trips = pd.merge(
