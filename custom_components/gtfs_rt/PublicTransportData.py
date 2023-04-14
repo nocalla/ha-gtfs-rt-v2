@@ -231,32 +231,24 @@ class PublicTransportData:
 
         # duplicated columns fixing
         duplicated_columns = [
-            "stop_id_x",
-            "stop_id_y",
-            "route_id_x",
-            "route_id_y",
-            "direction_id_x",
-            "direction_id_y",
-            "stop_sequence_x",
-            "stop_sequence_y",
+            "stop_id",
+            "route_id",
+            "direction_id",
+            "stop_sequence",
         ]
-        # convert categorical columns to strings
-        trip_update_df[duplicated_columns] = trip_update_df[
-            duplicated_columns
-        ].astype(str)
-        # choose non-NA values for duplicated columns and combine
-        trip_update_df["stop_id"] = trip_update_df["stop_id_x"].combine_first(
-            trip_update_df["stop_id_y"]
-        )
-        trip_update_df["route_id"] = trip_update_df[
-            "route_id_x"
-        ].combine_first(trip_update_df["route_id_y"])
-        trip_update_df["direction_id"] = trip_update_df[
-            "direction_id_x"
-        ].combine_first(trip_update_df["direction_id_y"])
 
+        # If column from X is NA, fill with value from Y
+        for column in duplicated_columns:
+            trip_update_df[column] = (
+                trip_update_df[f"{column}_x"]
+                .astype(str)
+                .fillna(trip_update_df[f"{column}_y"].astype(str))
+            )
         # drop intermediate columns
-        trip_update_df = trip_update_df.drop(columns=duplicated_columns)
+        trip_update_df = trip_update_df.drop(
+            columns=[f"{c}_x" for c in duplicated_columns]
+            + [f"{c}_y" for c in duplicated_columns]
+        )
         debug_dataframe(trip_update_df, "Merged live and static info")
 
         # need to split route_ids if there's a delimiter
