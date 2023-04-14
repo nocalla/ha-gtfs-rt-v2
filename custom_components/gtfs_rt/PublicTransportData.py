@@ -295,7 +295,6 @@ class PublicTransportData:
             )
         ).fillna(0)
 
-
         # work out updated_departure_time
         trip_update_df["updated_departure_time"] = (
             trip_update_df["live_departure_time"]
@@ -328,7 +327,7 @@ class PublicTransportData:
         log_debug(["Removing times in the past..."], 0)
 
         trip_update_df = trip_update_df.query(
-            "updated_arrival_time - @now_secs >=0"
+            f"updated_arrival_time - {now_secs} >=0"
         )
         debug_dataframe(trip_update_df, "Filter out past Stop Times")
 
@@ -396,7 +395,6 @@ class PublicTransportData:
             self.info_df.query(query_str)
             .sort_values(by=[order_by], ascending=order_ascending)
             .reset_index()
-            .head(limit)
         )
         debug_dataframe(filtered_df, "Filtered data")
-        return filtered_df.to_dict(orient="index")
+        return filtered_df.head(limit).to_dict(orient="index")
