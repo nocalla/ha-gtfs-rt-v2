@@ -7,9 +7,12 @@ See test_translink.yaml for example
 <output file> is a text file for output
 """
 import argparse
+import cProfile
 import logging
+import pstats
 import sys
 import time
+from io import StringIO
 
 import yaml
 from sensor import PLATFORM_SCHEMA, setup_platform
@@ -24,7 +27,7 @@ def add_devices(sensors: list):
     return
 
 
-if __name__ == "__main__":
+def get_arguments():
     parser = argparse.ArgumentParser(
         description="Test script for ha-gtfs-rt-v2"
     )
@@ -56,33 +59,66 @@ if __name__ == "__main__":
         logging.basicConfig(
             filename=args["log"], filemode="w", level=DEBUG_LEVEL
         )
+    return args
 
-    with open(args["file"], "r") as test_yaml:
+
+def validate_config(file: str) -> dict:
+    with open(file, "r") as test_yaml:
         input_config = yaml.safe_load(test_yaml)
         input_config["platform"] = "platform"
-
+    configuration = dict()
     try:
         configuration = PLATFORM_SCHEMA(input_config)
         _LOGGER.info("Input file configuration is valid.")
-        _LOGGER.info(configuration)
-        start_time = time.time()
-        sensors = setup_platform("", configuration, add_devices, None)
-        elapsed_time = time.time() - start_time
-        _LOGGER.info(f"\nElapsed time: {elapsed_time:.2f} seconds")
-        print("Looping underway- cancel loop with CTRL+C\n")
-        while True:
-            _LOGGER.info(
-                "\nWaiting before looping (Cancel loop with CTRL+C)..."
-            )
-            time.sleep(60)  # test out repeated polling
-            start_time = time.time()
-            _LOGGER.info(f"\nUpdating sensors @ {start_time}...")
-            for sensor in sensors:
-                sensor.update()
-            elapsed_time = time.time() - start_time
-            _LOGGER.info(f"\nElapsed time: {elapsed_time:.2f} seconds")
-    except KeyboardInterrupt:
-        logging.info("Loop terminated manually.")
     except Invalid as se:
         _LOGGER.error(input_config)
         logging.error(f"Input file configuration invalid: {se}")
+    return configuration
+
+
+def update_sensors(sensors: list, config: dict) -> list:
+    if len(sensors) == 0:
+        sensors = setup_platform("", config, add_devices, None)
+    else:
+        for sensor in sensors:
+            sensor.update()
+    return sensors
+
+
+def main():
+    args = get_arguments()
+    configuration = validate_config(args["file"])
+    _LOGGER.info(configuration)
+
+    sensors = list()
+    loop_str = "\nLooping is now active - press Ctrl & C to cancel."
+    print(loop_str)
+    _LOGGER.info(loop_str)
+    profiler = cProfile.Profile()
+
+    while True:
+        profiler.enable()
+        sensors = update_sensors(sensors, configuration)
+
+        profiler.disable()
+        stats_file = StringIO()
+        stats = (
+            pstats.Stats(profiler, stream=stats_file)
+            .strip_dirs()
+            .sort_stats("cumtime")
+        )
+        stats.print_stats(20)
+        _LOGGER.info(
+            "\tCode profiling stats for this iteration:\n"
+            f"{stats_file.getvalue()}"
+        )
+
+        _LOGGER.info("Waiting before looping...")
+        time.sleep(60)  # test out repeated polling
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        _LOGGER.error("Interrupted manually.")
