@@ -187,11 +187,6 @@ def get_dataframes(url: str) -> dict[str, pd.DataFrame]:
             with zip_file.open(filename, "r") as file:
                 # Create a Pandas DataFrame from the file
                 df = pd.read_csv(file, dtype=datatypes)
-                # convert objects to categories
-                df[df.select_dtypes(["object"]).columns] = df.select_dtypes(
-                    ["object"]
-                ).apply(lambda x: x.astype("category"))
-
                 # Add the DataFrame to the dictionary using filename as key
                 dataframes[filename[:-4]] = df
 
