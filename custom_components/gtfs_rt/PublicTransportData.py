@@ -172,25 +172,7 @@ class PublicTransportData:
         self.info_df = pd.DataFrame()
         self.CachedGTFSData = GTFSCache()
 
-    @Throttle(MIN_TIME_BETWEEN_UPDATES)
-    def update(self) -> None:
-        log_info(
-            [
-                "trip_update_url",
-                self._trip_update_url,
-                "\nvehicle_position_url",
-                self._vehicle_position_url,
-                "\nheader",
-                self._headers,
-            ],
-            0,
-        )
-        # get static timetable data
-        timetable_df = StaticMasterGTFSInfo(
-            url=self.static_gtfs_url, CachedData=self.CachedGTFSData
-        ).departure_info
-        debug_dataframe(timetable_df, "Static Timetable Info")
-
+    def get_live_data(self) -> pd.DataFrame:
         # create trip update dataframe
         # Use list comprehension to filter entities with trip_update field
         feed_entities = [
@@ -219,10 +201,31 @@ class PublicTransportData:
             left=trip_update_df, right=vehicle_info_df, how="left"
         )
         debug_dataframe(trip_update_df, "Merged Trip & Vehicle Info")
+        return trip_update_df
 
+    @Throttle(MIN_TIME_BETWEEN_UPDATES)
+    def update(self) -> None:
+        log_info(
+            [
+                "trip_update_url",
+                self._trip_update_url,
+                "\nvehicle_position_url",
+                self._vehicle_position_url,
+                "\nheader",
+                self._headers,
+            ],
+            0,
+        )
+        # get static timetable data
+        timetable_df = StaticMasterGTFSInfo(
+            url=self.static_gtfs_url, CachedData=self.CachedGTFSData
+        ).departure_info
+        debug_dataframe(timetable_df, "Static Timetable Info")
+
+        live_df = self.get_live_data()
         # merge live and static data
         trip_update_df = pd.merge(
-            trip_update_df,
+            live_df,
             timetable_df,
             how="outer",
             on="trip_id",
