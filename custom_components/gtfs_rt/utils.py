@@ -91,3 +91,39 @@ def unix_to_str_timestamp(time, time_format: str) -> str:
         return time.strftime(time_format)
     else:
         return "-"
+
+
+def remove_duplicated_columns(
+    df: pd.DataFrame,
+    column_names: list[str],
+    x_suffix: str,
+    y_suffix: str,
+) -> pd.DataFrame:
+    """
+    Remove specified duplicate columns from a dataframe after merging.
+
+    :param df: Dataframe to modify.
+    :type df: pd.DataFrame
+    :param column_names: List of column names that are duplicated.
+    :type column_names: list[str]
+    :param x_suffix: Suffix appended to data from "left" dataframe.
+    :type x_suffix: str
+    :param y_suffix: Suffix appended to data from "right" dataframe.
+    :type y_suffix: str
+    :return: Dataframe with duplicate columns removed, favouring the data from
+    the "left" dataframe unless that is NA.
+    :rtype: pd.DataFrame
+    """
+
+    # If column from X is NA, fill with value from Y
+    for column in column_names:
+        df[column] = (
+            df[f"{column}_{x_suffix}"]
+            .astype(str)
+            .fillna(df[f"{column}_{y_suffix}"].astype(str))
+        )
+    # drop intermediate columns
+    return df.drop(
+        columns=[f"{c}_{x_suffix}" for c in column_names]
+        + [f"{c}_{y_suffix}" for c in column_names]
+    )

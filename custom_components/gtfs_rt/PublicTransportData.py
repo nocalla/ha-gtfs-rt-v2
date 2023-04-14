@@ -6,7 +6,13 @@ import requests
 from google.transit import gtfs_realtime_pb2
 from homeassistant.util import Throttle
 from StaticTimetable import GTFSCache, StaticMasterGTFSInfo
-from utils import debug_dataframe, log_debug, log_error, log_info
+from utils import (
+    debug_dataframe,
+    log_debug,
+    log_error,
+    log_info,
+    remove_duplicated_columns,
+)
 
 MIN_TIME_BETWEEN_UPDATES = timedelta(seconds=60)
 
@@ -232,26 +238,18 @@ class PublicTransportData:
             indicator="source",
         )
 
-        # duplicated columns fixing
-        duplicated_columns = [
-            "stop_id",
-            "route_id",
-            "direction_id",
-            "stop_sequence",
-        ]
-
-        # If column from X is NA, fill with value from Y
-        for column in duplicated_columns:
-            trip_update_df[column] = (
-                trip_update_df[f"{column}_x"]
-                .astype(str)
-                .fillna(trip_update_df[f"{column}_y"].astype(str))
-            )
-        # drop intermediate columns
-        trip_update_df = trip_update_df.drop(
-            columns=[f"{c}_x" for c in duplicated_columns]
-            + [f"{c}_y" for c in duplicated_columns]
+        trip_update_df = remove_duplicated_columns(
+            df=trip_update_df,
+            column_names=[
+                "stop_id",
+                "route_id",
+                "direction_id",
+                "stop_sequence",
+            ],
+            x_suffix="x",
+            y_suffix="y",
         )
+
         debug_dataframe(trip_update_df, "Merged live and static info")
 
         # need to split route_ids if there's a delimiter
